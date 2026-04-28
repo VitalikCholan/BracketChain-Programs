@@ -5,6 +5,7 @@ use crate::constants::MAX_TOURNAMENT_NAME_LEN;
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, Debug, InitSpace)]
 pub enum TournamentStatus {
     Registration,
+    PendingBracketInit,
     Active,
     Completed,
     Cancelled,
@@ -51,6 +52,7 @@ pub struct Tournament {
     pub max_participants: u16,
     pub bracket_size: u16,
     pub participant_count: u16,
+    pub matches_initialized: u16,
     pub matches_reported: u16,
     pub total_matches: u16,
     pub registration_deadline: i64,
