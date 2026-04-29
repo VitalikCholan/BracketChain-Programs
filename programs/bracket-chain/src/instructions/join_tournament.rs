@@ -83,7 +83,7 @@ pub(crate) fn handler(ctx: Context<JoinTournament>) -> Result<()> {
     let participant = &mut ctx.accounts.participant;
     participant.tournament = tournament.key();
     participant.wallet = ctx.accounts.player.key();
-    participant.seed_index = 0;
+    participant.seed_index = participant_index;
     participant.refund_paid = false;
     participant.bump = ctx.bumps.participant;
 
