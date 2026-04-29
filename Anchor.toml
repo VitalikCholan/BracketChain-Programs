@@ -5,11 +5,11 @@ package_manager = "yarn"
 resolution = true
 skip-lint = false
 
-[programs.localnet]
-bracket_chain = "EF19YVUerm5QW1CsZeqiPDAFFtaXgdt6WuYBGeiz9Q1z"
-
 [programs.devnet]
-bracket_chain = "EF19YVUerm5QW1CsZeqiPDAFFtaXgdt6WuYBGeiz9Q1z"
+bracket_chain = "AuXJKpuZtkegs2ZSgopgckhN7Ev8bUz4zBc238LD2F1"
+
+[programs.localnet]
+bracket_chain = "AuXJKpuZtkegs2ZSgopgckhN7Ev8bUz4zBc238LD2F1"
 
 [registry]
 url = "https://api.apr.dev"

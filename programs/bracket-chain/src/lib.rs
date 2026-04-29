@@ -9,7 +9,7 @@ pub mod state;
 use instructions::*;
 use state::PayoutPreset;
 
-declare_id!("EF19YVUerm5QW1CsZeqiPDAFFtaXgdt6WuYBGeiz9Q1z");
+declare_id!("AuXJKpuZtkegs2ZSgopgckhN7Ev8bUz4zBc238LD2F1");
 
 #[program]
 pub mod bracket_chain {
