@@ -311,6 +311,7 @@ describe("bracket-chain", function () {
         caller: organizer.publicKey,
         tournament: tournamentPda,
         vault: vaultPda,
+        organizerTokenAccount: null,
         tokenProgram: TOKEN_PROGRAM_ID,
       })
       .remainingAccounts(remaining)

@@ -1,5 +1,4 @@
 use anchor_lang::prelude::*;
-use anchor_lang::solana_program::keccak;
 use anchor_spl::token::{self, Token, TokenAccount, Transfer};
 
 use crate::constants::{BPS_DENOMINATOR, MATCH_SEED, PROTOCOL_FEE_BPS, TOURNAMENT_SEED, VAULT_SEED};
@@ -19,7 +18,7 @@ pub struct ReportResult<'info> {
         seeds = [
             TOURNAMENT_SEED,
             tournament.organizer.as_ref(),
-            &keccak::hashv(&[tournament.name.as_bytes()]).0,
+            tournament.name.as_bytes(),
         ],
         bump = tournament.bump,
     )]
@@ -252,11 +251,10 @@ fn distribute_prizes<'info>(
 
     let bps_table = payout_preset.basis_points();
     let bump_slice = [tournament_bump];
-    let name_hash = keccak::hashv(&[tournament_name.as_bytes()]).0;
     let signer_seeds: &[&[&[u8]]] = &[&[
         TOURNAMENT_SEED,
         organizer_key.as_ref(),
-        &name_hash,
+        tournament_name.as_bytes(),
         &bump_slice,
     ]];
 

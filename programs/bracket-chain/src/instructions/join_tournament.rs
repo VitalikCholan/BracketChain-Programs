@@ -1,5 +1,4 @@
 use anchor_lang::prelude::*;
-use anchor_lang::solana_program::keccak;
 use anchor_spl::token::{self, Token, TokenAccount, Transfer};
 
 use crate::constants::{PARTICIPANT_SEED, VAULT_SEED};
@@ -17,7 +16,7 @@ pub struct JoinTournament<'info> {
         seeds = [
             crate::constants::TOURNAMENT_SEED,
             tournament.organizer.as_ref(),
-            &keccak::hashv(&[tournament.name.as_bytes()]).0,
+            tournament.name.as_bytes(),
         ],
         bump = tournament.bump,
     )]

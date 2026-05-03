@@ -1,5 +1,4 @@
 use anchor_lang::prelude::*;
-use anchor_lang::solana_program::keccak;
 use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
 
 use crate::constants::{
@@ -27,9 +26,9 @@ pub struct CreateTournament<'info> {
     /// caller. `Account<Mint>` validates the account is a real Mint.
     pub token_mint: Account<'info, Mint>,
 
-    /// Tournament PDA. Seed derived from `keccak256(name)` so names up to
-    /// `MAX_TOURNAMENT_NAME_LEN` (64) bytes can be supported despite Solana's
-    /// 32-byte-per-seed limit. Length validated in handler.
+    /// Tournament PDA. `name` is used directly as a seed; capped at
+    /// `MAX_TOURNAMENT_NAME_LEN` (32) bytes — Solana's per-seed limit. Length
+    /// validated in the handler before account init.
     #[account(
         init,
         payer = organizer,
@@ -37,7 +36,7 @@ pub struct CreateTournament<'info> {
         seeds = [
             TOURNAMENT_SEED,
             organizer.key().as_ref(),
-            &keccak::hashv(&[name.as_bytes()]).0,
+            name.as_bytes(),
         ],
         bump,
     )]
@@ -56,16 +55,14 @@ pub struct CreateTournament<'info> {
     /// Optional organizer ATA used to fund `organizer_deposit`. Required when
     /// `organizer_deposit > 0`; pass `None` to skip. Mint + owner constraints
     /// guarantee the deposit is debited from the organizer's own funds in the
-    /// configured tournament token.
+    /// configured tournament token. Anchor 0.32 auto-unwraps `Option<Account>`
+    /// inside constraint expressions and skips the check when the account is
+    /// `None`, so we reference fields directly without explicit Option handling.
     #[account(
         mut,
-        constraint = organizer_token_account.as_ref()
-            .map(|acc| acc.mint == token_mint.key())
-            .unwrap_or(true)
+        constraint = organizer_token_account.mint == token_mint.key()
             @ BracketChainError::InvalidTokenMint,
-        constraint = organizer_token_account.as_ref()
-            .map(|acc| acc.owner == organizer.key())
-            .unwrap_or(true)
+        constraint = organizer_token_account.owner == organizer.key()
             @ BracketChainError::UnauthorizedAuthority,
     )]
     pub organizer_token_account: Option<Account<'info, TokenAccount>>,

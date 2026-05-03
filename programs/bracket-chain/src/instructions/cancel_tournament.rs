@@ -1,5 +1,4 @@
 use anchor_lang::prelude::*;
-use anchor_lang::solana_program::keccak;
 use anchor_spl::token::{self, Token, TokenAccount, Transfer};
 
 use crate::constants::{TOURNAMENT_SEED, VAULT_SEED};
@@ -19,7 +18,7 @@ pub struct CancelTournament<'info> {
         seeds = [
             TOURNAMENT_SEED,
             tournament.organizer.as_ref(),
-            &keccak::hashv(&[tournament.name.as_bytes()]).0,
+            tournament.name.as_bytes(),
         ],
         bump = tournament.bump,
     )]
@@ -88,11 +87,10 @@ pub(crate) fn handler<'info>(
     let deposit_refunded = ctx.accounts.tournament.organizer_deposit_refunded;
 
     let bump_slice = [tournament_bump];
-    let name_hash = keccak::hashv(&[tournament_name.as_bytes()]).0;
     let signer_seeds: &[&[&[u8]]] = &[&[
         TOURNAMENT_SEED,
         organizer_key.as_ref(),
-        &name_hash,
+        tournament_name.as_bytes(),
         &bump_slice,
     ]];
 
