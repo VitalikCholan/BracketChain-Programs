@@ -4,8 +4,9 @@ use anchor_lang::prelude::*;
 pub struct TournamentCreated {
     pub tournament: Pubkey,
     pub organizer: Pubkey,
-    pub usdc_mint: Pubkey,
+    pub token_mint: Pubkey,
     pub entry_fee: u64,
+    pub organizer_deposit: u64,
     pub max_participants: u16,
     pub payout_preset: u8,
     pub registration_deadline: i64,
@@ -44,6 +45,19 @@ pub struct TournamentCompleted {
     pub fee_amount: u64,
     pub net_pool: u64,
     pub completed_at: i64,
+    /// Per-placement breakdown: place=1..=N for prize tiers (champion is place=1).
+    /// Includes only non-zero payouts in CPI-execution order.
+    pub placement_payouts: Vec<PlacementPayout>,
+    /// Treasury wallet receiving the protocol fee.
+    /// Self-contained event — indexers don't need extra reads.
+    pub treasury_recipient: Pubkey,
+}
+
+#[derive(Clone, AnchorSerialize, AnchorDeserialize)]
+pub struct PlacementPayout {
+    pub place: u8,
+    pub recipient: Pubkey,
+    pub amount: u64,
 }
 
 #[event]

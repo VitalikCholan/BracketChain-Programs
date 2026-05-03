@@ -61,7 +61,7 @@ describe("bracket-chain", function () {
         authority: provider.wallet.publicKey,
         protocolConfig: protocolConfigPda,
         treasury: treasuryWallet.publicKey,
-        usdcMint,
+        defaultMint: usdcMint,
         systemProgram: SystemProgram.programId,
       })
       .rpc();
@@ -89,13 +89,15 @@ describe("bracket-chain", function () {
         opts.maxParticipants,
         opts.payoutPreset,
         deadline,
+        new BN(0),
       )
       .accountsPartial({
         organizer: organizer.publicKey,
         protocolConfig: protocolConfigPda,
-        usdcMint,
+        tokenMint: usdcMint,
         tournament: tournamentPda,
         vault: vaultPda,
+        organizerTokenAccount: null,
         tokenProgram: TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
         rent: anchor.web3.SYSVAR_RENT_PUBKEY,

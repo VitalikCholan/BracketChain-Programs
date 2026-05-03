@@ -1,9 +1,10 @@
 use anchor_lang::prelude::*;
+use anchor_lang::solana_program::keccak;
 use anchor_spl::token::{self, Token, TokenAccount, Transfer};
 
 use crate::constants::{BPS_DENOMINATOR, MATCH_SEED, PROTOCOL_FEE_BPS, TOURNAMENT_SEED, VAULT_SEED};
 use crate::errors::BracketChainError;
-use crate::events::{MatchReported, TournamentCompleted};
+use crate::events::{MatchReported, PlacementPayout, TournamentCompleted};
 use crate::state::{
     MatchNode, MatchStatus, ProtocolConfig, Tournament, TournamentStatus,
 };
@@ -18,7 +19,7 @@ pub struct ReportResult<'info> {
         seeds = [
             TOURNAMENT_SEED,
             tournament.organizer.as_ref(),
-            tournament.name.as_bytes(),
+            &keccak::hashv(&[tournament.name.as_bytes()]).0,
         ],
         bump = tournament.bump,
     )]
@@ -118,8 +119,10 @@ pub(crate) fn handler<'info>(
             BracketChainError::InvalidMatchIndex
         );
 
-        let (gross_pool, fee_amount, net_pool) =
+        let (gross_pool, fee_amount, net_pool, placement_payouts) =
             distribute_prizes(&ctx, winner, player_a, player_b, &placements)?;
+
+        let treasury_recipient = ctx.accounts.protocol_config.treasury;
 
         let tournament = &mut ctx.accounts.tournament;
         tournament.status = TournamentStatus::Completed;
@@ -133,6 +136,8 @@ pub(crate) fn handler<'info>(
             fee_amount,
             net_pool,
             completed_at: now,
+            placement_payouts,
+            treasury_recipient,
         });
     } else {
         require!(
@@ -192,14 +197,16 @@ fn advance_winner<'info>(
     Ok(())
 }
 
-/// Returns (gross_pool, fee_amount, net_pool).
+/// Returns (gross_pool, fee_amount, net_pool, placement_payouts).
+/// `placement_payouts` includes only non-zero amounts in CPI-execution order
+/// (place=1, 2, ...). The treasury fee is emitted separately via fee_amount.
 fn distribute_prizes<'info>(
     ctx: &Context<'_, '_, '_, 'info, ReportResult<'info>>,
     winner: Pubkey,
     final_player_a: Pubkey,
     final_player_b: Pubkey,
     placements: &[Pubkey],
-) -> Result<(u64, u64, u64)> {
+) -> Result<(u64, u64, u64, Vec<PlacementPayout>)> {
     let payout_preset = ctx.accounts.tournament.payout_preset;
     let placement_count = payout_preset.placement_count();
 
@@ -231,7 +238,7 @@ fn distribute_prizes<'info>(
     let organizer_key = ctx.accounts.tournament.organizer;
     let tournament_name = ctx.accounts.tournament.name.clone();
     let tournament_bump = ctx.accounts.tournament.bump;
-    let usdc_mint = ctx.accounts.tournament.usdc_mint;
+    let token_mint = ctx.accounts.tournament.token_mint;
 
     let gross_pool = ctx.accounts.vault.amount;
     let fee_amount = (gross_pool as u128)
@@ -245,12 +252,15 @@ fn distribute_prizes<'info>(
 
     let bps_table = payout_preset.basis_points();
     let bump_slice = [tournament_bump];
+    let name_hash = keccak::hashv(&[tournament_name.as_bytes()]).0;
     let signer_seeds: &[&[&[u8]]] = &[&[
         TOURNAMENT_SEED,
         organizer_key.as_ref(),
-        tournament_name.as_bytes(),
+        &name_hash,
         &bump_slice,
     ]];
+
+    let mut placement_payouts: Vec<PlacementPayout> = Vec::with_capacity(placement_count);
 
     for i in 0..placement_count {
         let bps = bps_table[i];
@@ -265,7 +275,7 @@ fn distribute_prizes<'info>(
         }
 
         let ata_info = &ctx.remaining_accounts[i];
-        validate_token_account(ata_info, &placements[i], &usdc_mint)?;
+        validate_token_account(ata_info, &placements[i], &token_mint)?;
 
         token::transfer(
             CpiContext::new_with_signer(
@@ -279,12 +289,18 @@ fn distribute_prizes<'info>(
             ),
             amount,
         )?;
+
+        placement_payouts.push(PlacementPayout {
+            place: (i + 1) as u8,
+            recipient: placements[i],
+            amount,
+        });
     }
 
     if fee_amount > 0 {
         let treasury_ata = &ctx.remaining_accounts[placement_count];
         let treasury_wallet = ctx.accounts.protocol_config.treasury;
-        validate_token_account(treasury_ata, &treasury_wallet, &usdc_mint)?;
+        validate_token_account(treasury_ata, &treasury_wallet, &token_mint)?;
 
         token::transfer(
             CpiContext::new_with_signer(
@@ -300,7 +316,7 @@ fn distribute_prizes<'info>(
         )?;
     }
 
-    Ok((gross_pool, fee_amount, net_pool))
+    Ok((gross_pool, fee_amount, net_pool, placement_payouts))
 }
 
 fn validate_token_account(
@@ -311,15 +327,15 @@ fn validate_token_account(
     require_keys_eq!(
         *ai.owner,
         anchor_spl::token::ID,
-        BracketChainError::InvalidUsdcMint
+        BracketChainError::InvalidTokenMint
     );
     let data = ai.try_borrow_data()?;
-    require!(data.len() >= 165, BracketChainError::InvalidUsdcMint);
+    require!(data.len() >= 165, BracketChainError::InvalidTokenMint);
     let mint = Pubkey::try_from(&data[0..32])
-        .map_err(|_| error!(BracketChainError::InvalidUsdcMint))?;
+        .map_err(|_| error!(BracketChainError::InvalidTokenMint))?;
     let owner = Pubkey::try_from(&data[32..64])
-        .map_err(|_| error!(BracketChainError::InvalidUsdcMint))?;
-    require_keys_eq!(mint, *expected_mint, BracketChainError::InvalidUsdcMint);
+        .map_err(|_| error!(BracketChainError::InvalidTokenMint))?;
+    require_keys_eq!(mint, *expected_mint, BracketChainError::InvalidTokenMint);
     require_keys_eq!(owner, *expected_owner, BracketChainError::InvalidTreasury);
     Ok(())
 }

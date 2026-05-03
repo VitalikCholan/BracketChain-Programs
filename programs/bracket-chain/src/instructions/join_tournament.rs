@@ -1,4 +1,5 @@
 use anchor_lang::prelude::*;
+use anchor_lang::solana_program::keccak;
 use anchor_spl::token::{self, Token, TokenAccount, Transfer};
 
 use crate::constants::{PARTICIPANT_SEED, VAULT_SEED};
@@ -16,7 +17,7 @@ pub struct JoinTournament<'info> {
         seeds = [
             crate::constants::TOURNAMENT_SEED,
             tournament.organizer.as_ref(),
-            tournament.name.as_bytes(),
+            &keccak::hashv(&[tournament.name.as_bytes()]).0,
         ],
         bump = tournament.bump,
     )]
@@ -33,8 +34,8 @@ pub struct JoinTournament<'info> {
 
     #[account(
         mut,
-        constraint = player_token_account.mint == tournament.usdc_mint
-            @ BracketChainError::InvalidUsdcMint,
+        constraint = player_token_account.mint == tournament.token_mint
+            @ BracketChainError::InvalidTokenMint,
         constraint = player_token_account.owner == player.key()
             @ BracketChainError::UnauthorizedAuthority,
     )]

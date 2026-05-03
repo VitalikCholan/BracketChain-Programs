@@ -26,6 +26,7 @@ pub mod bracket_chain {
         max_participants: u16,
         payout_preset: PayoutPreset,
         registration_deadline: i64,
+        organizer_deposit: u64,
     ) -> Result<()> {
         instructions::create_tournament::handler(
             ctx,
@@ -34,6 +35,7 @@ pub mod bracket_chain {
             max_participants,
             payout_preset,
             registration_deadline,
+            organizer_deposit,
         )
     }
 

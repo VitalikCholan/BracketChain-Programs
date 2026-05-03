@@ -12,7 +12,7 @@ pub const MIN_PARTICIPANTS: u16 = 2;
 #[constant]
 pub const MAX_PARTICIPANTS: u16 = 128;
 
-pub const MAX_TOURNAMENT_NAME_LEN: usize = 32;
+pub const MAX_TOURNAMENT_NAME_LEN: usize = 64;
 
 pub const PROTOCOL_CONFIG_SEED: &[u8] = b"protocol_config";
 pub const TOURNAMENT_SEED: &[u8] = b"tournament";

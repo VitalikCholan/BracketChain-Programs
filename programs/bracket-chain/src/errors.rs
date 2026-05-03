@@ -47,11 +47,11 @@ pub enum BracketChainError {
     #[msg("Participant count is below the protocol minimum (2)")]
     MinParticipantsNotMet,
 
-    #[msg("Tournament name exceeds 32 bytes")]
+    #[msg("Tournament name exceeds 64 bytes")]
     NameTooLong,
 
-    #[msg("Provided USDC mint does not match the protocol-configured mint")]
-    InvalidUsdcMint,
+    #[msg("Provided token mint is invalid for this tournament")]
+    InvalidTokenMint,
 
     #[msg("Provided vault token account does not match the tournament vault")]
     InvalidVault,

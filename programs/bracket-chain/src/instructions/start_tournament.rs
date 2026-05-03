@@ -1,4 +1,5 @@
 use anchor_lang::prelude::*;
+use anchor_lang::solana_program::keccak;
 use anchor_lang::solana_program::sysvar::slot_hashes;
 use anchor_lang::system_program;
 
@@ -27,7 +28,7 @@ pub struct StartTournament<'info> {
         seeds = [
             crate::constants::TOURNAMENT_SEED,
             tournament.organizer.as_ref(),
-            tournament.name.as_bytes(),
+            &keccak::hashv(&[tournament.name.as_bytes()]).0,
         ],
         bump = tournament.bump,
     )]
