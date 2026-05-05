@@ -10,6 +10,9 @@ pub struct TournamentCreated {
     pub max_participants: u16,
     pub payout_preset: u8,
     pub registration_deadline: i64,
+    /// Human-readable tournament name (≤ MAX_TOURNAMENT_NAME_LEN bytes).
+    /// Indexers consume this to populate listing UIs without a follow-up RPC.
+    pub name: String,
 }
 
 #[event]

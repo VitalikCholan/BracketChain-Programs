@@ -158,6 +158,7 @@ pub(crate) fn handler(
         max_participants,
         payout_preset: payout_preset_discriminator(payout_preset),
         registration_deadline,
+        name: tournament.name.clone(),
     });
 
     Ok(())
