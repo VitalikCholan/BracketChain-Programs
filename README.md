@@ -48,7 +48,7 @@ Cancellation is allowed from `Registration` or `PendingBracketInit`. From `Activ
 | 2 | `create_tournament` | `name: String, entry_fee: u64, max_participants: u16, payout_preset: PayoutPreset, registration_deadline: i64, organizer_deposit: u64` | Creates `Tournament` PDA + PDA-owned vault TA. CPI from organizer's ATA → vault when `organizer_deposit > 0` (organizer ATA passed as optional account). Emits `TournamentCreated { ..., name, organizer_deposit }`. |
 | 3 | `join_tournament` | — | Transfers `entry_fee` from joiner's ATA → vault via SPL token CPI. Creates `Participant` PDA. Emits `ParticipantRegistered`. |
 | 4 | `start_tournament` | `chunk_index: u8, total_chunks: u8` | First call captures `seed_hash` from `slot_hashes[1..N]`, derives seeded bracket order, and inits matches in chunks. Idempotent — re-running a chunk that already ran is a no-op. Bye matches Completed at init (winner = the one player). Flips status to `Active` after the final chunk. Emits `TournamentStarted`. |
-| 5 | `report_result` | `winner: Pubkey, score_a: u16, score_b: u16` | Validates match `Active` and `winner ∈ {a, b}`. Non-final advances winner to next round's match slot. Final match: distributes prize across placements per `PayoutPreset` (3rd–Nth recipients passed by organizer, validated against participant set), takes 3.5% to treasury, flips status to `Completed`. Emits `MatchReported` per match + `TournamentCompleted { placement_payouts, treasury_recipient }` on final. |
+| 5 | `report_result` | `winner: Pubkey, score_a: u16, score_b: u16` | Validates match `Active` and `winner ∈ {a, b}`. Non-final advances winner to next round's match slot. Final match: refunds `organizer_deposit` back to organizer (Variant A — deposit is excluded from the prize-pool basis), then distributes prize across placements per `PayoutPreset` (3rd–Nth recipients passed by organizer, validated against participant set) over `vault.amount − organizer_deposit`, takes 3.5% to treasury, flips status to `Completed`. Emits `MatchReported` per match + `RefundIssued` on the deposit refund + `TournamentCompleted { placement_payouts, treasury_recipient }` on final. The optional `organizer_token_account` account is required only when `organizer_deposit > 0`. |
 | 6 | `cancel_tournament` | — | Two-tier authorization: organizer flips status to `Cancelled` (first call); any signer can drive subsequent refund chunks. Refunds entry fees back to participant ATAs + `organizer_deposit` back to organizer ATA (idempotent via `organizer_deposit_refunded` flag). Emits `TournamentCancelled` + `RefundIssued` per refund. Rejects from `Active` (matches already reported). |
 
 ---
@@ -191,7 +191,21 @@ Five tests covering the demo-relevant paths:
 
 `tests/utils.ts` exposes `sendStartChunks` which wraps each chunk tx with `ComputeBudgetProgram.setComputeUnitLimit(1_400_000)`. Treat this as the SDK's pattern for the `startTournament` flow.
 
-Outstanding test coverage gaps (Tier 4 polish, not blockers): no test exercises non-zero `organizer_deposit` transfer or its refund (all 5 tests pass `new BN(0)`); the 128-player test stops at bracket init and does not run the full report → distribute path at 128p.
+Tier-4 coverage (Phase 0 Section 3.4):
+
+- `tests/organizer-deposit.test.ts` — 3 tests covering pre-start refund, idempotency, and Variant A deposit refund on `report_result` final-match.
+- `tests/capacity-128p-deep.test.ts` — 128 players, Deep payout preset, full bracket → final, with `meta.computeUnitsConsumed` sampling on representative ix.
+- CU baseline numbers committed in `CU_BUDGET.md`. Phase 1 redeploy ceremony re-runs the suite and diffs against the file as a regression contract.
+
+## Codama codegen
+
+The SDK + Indexer consume typed accounts/instructions generated from `target/idl/bracket_chain.json` by [`@codama/cli`](https://github.com/codama-idl/codama) using `@codama/renderers-js@2.x` (which emits the `@solana/kit`-style package-wrapped layout). Configuration lives at `codama.json`.
+
+```bash
+make codama-generate   # rebuilds IDL, regenerates ../BracketChain-Sdk/src/generated and ../BracketChain-Indexer/src/generated
+```
+
+Sibling repos expected as peers (`../BracketChain-Sdk`, `../BracketChain-Indexer`). The generated trees should be committed in each consumer repo so a CI gate can detect drift (drift gate itself is deferred to cross-repo CI design — see `plan_tasks/bracketchain-phase-0-foundation.md` Section 2.6).
 
 ---
 

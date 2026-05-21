@@ -1,0 +1,13 @@
+{
+  "idl": "target/idl/bracket_chain.json",
+  "scripts": {
+    "sdk": {
+      "from": "@codama/renderers-js",
+      "args": ["../BracketChain-Sdk/src/generated"]
+    },
+    "indexer": {
+      "from": "@codama/renderers-js",
+      "args": ["../BracketChain-Indexer/src/generated"]
+    }
+  }
+}

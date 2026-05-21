@@ -103,13 +103,36 @@ export async function fundFromProvider(
   to: PublicKey,
   lamports: number,
 ): Promise<void> {
-  const ix = SystemProgram.transfer({
-    fromPubkey: provider.wallet.publicKey,
-    toPubkey: to,
-    lamports,
-  });
-  const tx = new Transaction().add(ix);
-  await provider.sendAndConfirm(tx, []);
+  await withBlockhashRetry(async () => {
+    const ix = SystemProgram.transfer({
+      fromPubkey: provider.wallet.publicKey,
+      toPubkey: to,
+      lamports,
+    });
+    const tx = new Transaction().add(ix);
+    await provider.sendAndConfirm(tx, []);
+  }, "fundFromProvider");
+}
+
+// Wraps any async block that submits a tx, retrying on the transient
+// "Blockhash not found" / simulation-failed errors emitted by
+// solana-test-validator under rapid sequential load.
+export async function withBlockhashRetry<T>(
+  build: () => Promise<T>,
+  label: string,
+  attempts: number = 8,
+): Promise<T> {
+  let lastErr: unknown = null;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await build();
+    } catch (e: any) {
+      lastErr = e;
+      if (!isTransientRpcError(e)) throw e;
+      await new Promise((resolve) => setTimeout(resolve, 250 * (i + 1)));
+    }
+  }
+  throw new Error(`${label} failed after ${attempts} attempts: ${lastErr}`);
 }
 
 export async function createUsdcLikeMint(
@@ -135,25 +158,47 @@ export async function makeFundedWallet(
   await fundFromProvider(provider, kp.publicKey, solAmount * LAMPORTS_PER_SOL);
 
   const payer = (provider.wallet as anchor.Wallet).payer;
-  const ataInfo = await getOrCreateAssociatedTokenAccount(
-    provider.connection,
-    payer,
-    mint,
-    kp.publicKey,
-  );
+  // `getOrCreateAssociatedTokenAccount` from spl-token has known flakiness on
+  // local validators: the post-create getAccount() races validator gossip and
+  // throws `TokenAccountNotFoundError` even after sendAndConfirm returned. We
+  // retry it (and the SOL fund + mint-to) under blockhash-aware backoff.
+  const ataInfo = await getOrCreateAtaWithRetry(provider.connection, payer, mint, kp.publicKey);
 
   if (!usdcAmount.isZero()) {
-    await mintTo(
-      provider.connection,
-      payer,
-      mint,
-      ataInfo.address,
-      provider.wallet.publicKey,
-      BigInt(usdcAmount.toString()),
+    await withBlockhashRetry(
+      () =>
+        mintTo(
+          provider.connection,
+          payer,
+          mint,
+          ataInfo.address,
+          provider.wallet.publicKey,
+          BigInt(usdcAmount.toString()),
+        ),
+      "mintTo",
     );
   }
 
   return { keypair: kp, ata: ataInfo.address };
+}
+
+async function getOrCreateAtaWithRetry(
+  connection: Connection,
+  payer: Keypair,
+  mint: PublicKey,
+  owner: PublicKey,
+  attempts: number = 8,
+): Promise<TokenAccount> {
+  let lastErr: unknown = null;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await getOrCreateAssociatedTokenAccount(connection, payer, mint, owner, "confirmed");
+    } catch (e) {
+      lastErr = e;
+      await new Promise((resolve) => setTimeout(resolve, 200 * (i + 1)));
+    }
+  }
+  throw lastErr;
 }
 
 export async function makeAtaOnly(
@@ -177,6 +222,87 @@ export async function tokenBalance(
 ): Promise<bigint> {
   const acc: TokenAccount = await getAccount(conn, ata);
   return acc.amount;
+}
+
+// Retries an Anchor `.rpc()`-returning builder against the transient
+// "Blockhash not found" failures that solana-test-validator emits when bursts
+// of sequential txs outrun its blockhash-fetch cadence. Exponential-ish
+// backoff bounded so callers fail loudly on persistent errors.
+export async function rpcWithRetry(
+  build: () => Promise<string>,
+  label: string = "rpc",
+  attempts: number = 8,
+): Promise<string> {
+  let lastErr: unknown = null;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await build();
+    } catch (e: any) {
+      lastErr = e;
+      if (!isTransientRpcError(e)) throw e;
+      await new Promise((resolve) => setTimeout(resolve, 250 * (i + 1)));
+    }
+  }
+  throw new Error(`${label} failed after ${attempts} attempts: ${lastErr}`);
+}
+
+function isTransientRpcError(e: any): boolean {
+  const msg = `${e?.message ?? ""} ${JSON.stringify(e?.logs ?? "")} ${String(e)}`;
+  return /blockhash not found|block height exceeded|simulation failed|node is behind|TransactionExpiredBlockheightExceededError/i.test(
+    msg,
+  );
+}
+
+// Fetches `meta.computeUnitsConsumed` for a confirmed tx. Retries to bridge
+// the gap between RPC confirm and indexer availability on local validator.
+export async function measureCu(
+  conn: Connection,
+  sig: string,
+  attempts: number = 6,
+): Promise<number> {
+  for (let i = 0; i < attempts; i++) {
+    const tx = await conn.getTransaction(sig, {
+      commitment: "confirmed",
+      maxSupportedTransactionVersion: 0,
+    });
+    if (tx?.meta?.computeUnitsConsumed !== undefined) {
+      return tx.meta.computeUnitsConsumed;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 150 * (i + 1)));
+  }
+  throw new Error(`measureCu: no compute-units-consumed for sig=${sig}`);
+}
+
+// Initializes `ProtocolConfig` if not already initialized, and returns the
+// treasury wallet + per-mint treasury ATA. Lets independent test files share a
+// validator (mocha runs them sequentially against the same `solana-test-validator`).
+export async function ensureProtocolInitialized(
+  provider: anchor.AnchorProvider,
+  program: Program<BracketChain>,
+  defaultMint: PublicKey,
+): Promise<{ treasury: PublicKey; treasuryAta: PublicKey; protocolConfigPda: PublicKey }> {
+  const [protocolConfigPda] = findProtocolConfigPda(program.programId);
+  const existing = await program.account.protocolConfig.fetchNullable(protocolConfigPda);
+  let treasury: PublicKey;
+
+  if (existing) {
+    treasury = existing.treasury;
+  } else {
+    treasury = Keypair.generate().publicKey;
+    await program.methods
+      .initializeProtocol()
+      .accountsPartial({
+        authority: provider.wallet.publicKey,
+        protocolConfig: protocolConfigPda,
+        treasury,
+        defaultMint,
+        systemProgram: SystemProgram.programId,
+      })
+      .rpc();
+  }
+
+  const treasuryAta = await makeAtaOnly(provider, defaultMint, treasury);
+  return { treasury, treasuryAta, protocolConfigPda };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -321,20 +447,24 @@ export async function sendStartChunks(
       isSigner: false,
       isWritable: true,
     }));
-    const sig = await program.methods
-      .startTournament(dChunk as any)
-      .accountsPartial({
-        organizer: organizer.publicKey,
-        tournament,
-        slotHashes: SYSVAR_SLOT_HASHES_PUBKEY,
-        systemProgram: SystemProgram.programId,
-      })
-      .remainingAccounts(remainingAccounts)
-      .preInstructions([
-        ComputeBudgetProgram.setComputeUnitLimit({ units: computeUnits }),
-      ])
-      .signers([organizer])
-      .rpc();
+    const sig = await rpcWithRetry(
+      () =>
+        program.methods
+          .startTournament(dChunk as any)
+          .accountsPartial({
+            organizer: organizer.publicKey,
+            tournament,
+            slotHashes: SYSVAR_SLOT_HASHES_PUBKEY,
+            systemProgram: SystemProgram.programId,
+          })
+          .remainingAccounts(remainingAccounts)
+          .preInstructions([
+            ComputeBudgetProgram.setComputeUnitLimit({ units: computeUnits }),
+          ])
+          .signers([organizer])
+          .rpc(),
+      `start_tournament[chunk ${i / chunkSize}]`,
+    );
     sigs.push(sig);
   }
   return sigs;
