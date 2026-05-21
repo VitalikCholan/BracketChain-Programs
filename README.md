@@ -10,12 +10,12 @@ This repo contains only the smart contracts. The full system spans five repos �
 
 | Field | Value |
 |---|---|
-| Program ID (devnet + localnet) | `AuXJKpuZtkegs2ZSgopgckhN7Ev8bUz4zBc238LD2F1` |
-| Cluster | devnet — see [program account](https://explorer.solana.com/address/AuXJKpuZtkegs2ZSgopgckhN7Ev8bUz4zBc238LD2F1?cluster=devnet) |
+| Program ID (devnet + localnet) | `3YpkUKBh8288XN2dCKSwBnEdyc5UozSJ19A1ZCLpUZsZ` |
+| Cluster | devnet — see [program account](https://explorer.solana.com/address/3YpkUKBh8288XN2dCKSwBnEdyc5UozSJ19A1ZCLpUZsZ?cluster=devnet) |
 | Anchor | 0.32.1 |
 | Solana | 2.x |
-| Tests | 5/5 passing (mocha, see [Tests](#tests)) |
-| IDL | `target/idl/bracket_chain.json` (synced into SDK + indexer; see [`Makefile:sync-idl`](./Makefile)) |
+| Tests | 10/10 passing (ts-mocha, see [Tests](#tests)) |
+| IDL | `target/idl/bracket_chain.json` — single source of truth; sibling SDK + indexer client trees regenerate from it via `make codama-generate` |
 | Upgrade authority | single key on devnet — Squads 2-of-3 multisig is a mainnet-prep gate, not in MVP |
 
 ---
@@ -166,36 +166,38 @@ Required:
 - `pnpm` (used by SDK init script invoked from this Makefile) and `yarn` (Anchor scripts)
 
 ```bash
-make build            # = anchor build + sync IDL into ../bracket-chain-sdk + ../bracket-chain-indexer
+make build            # = anchor build (compiles + emits target/idl/bracket_chain.json)
+make codama-generate  # = anchor build + npx codama run --all (regenerates SDK + indexer client trees)
 ```
 
-`build` always runs `sync-idl` afterward. The vendored IDL exists in three places (program target, SDK src, indexer src). All three must move together — if the SDK or indexer's vendored IDL drifts behind a new event field, the BorshCoder will silently decode garbage. Never run `anchor build` directly without following up with `make sync-idl`.
+After any IDL-affecting change run `make codama-generate` from this repo with `../BracketChain-Sdk` and `../BracketChain-Indexer` checked out as sibling peers. The generated trees land at `../BracketChain-Sdk/src/generated/` and `../BracketChain-Indexer/src/generated/` and must be committed alongside the program diff so the consumers' typed accounts/instructions stay in lockstep with on-chain layout. Event decoding still goes through `BorshCoder` over `target/idl/bracket_chain.json` (Codama's v2 renderers don't emit event decoders yet), so a fresh `target/idl/` is also required by the indexer parser.
 
 ---
 
 ## Tests
 
 ```bash
-make test             # = anchor test (boots local validator, runs ts-mocha, tears down)
+anchor test           # boots local validator, runs ts-mocha across all tests/*.ts, tears down
 ```
 
-Five tests covering the demo-relevant paths:
+Ten tests across three files:
 
-| # | Scenario | Verifies |
-|---|---|---|
-| 1 | WTA 8-player happy path | Single payout = 96.5% of prize pool to champion; 3.5% to treasury |
-| 2 | Standard 8-player happy path | 60/25/15 split + fee math |
-| 3 | Cancel + refund (4 players) | Vault drains to zero; all 4 entry fees returned to original ATAs |
-| 4 | Bye 7-player tournament | Non-power-of-2 bracket; bye matches Completed at init; advancement works |
-| 5 | 128-player chunked start | `start_tournament` succeeds across 19 chunks; per-chunk compute budget under limit; status flips to `Active` only after final chunk |
+| File | # | Scenario | Verifies |
+|---|---|---|---|
+| `tests/bracket-chain.ts` | 1 | WTA 8-player happy path | Single payout = 96.5% of prize pool to champion; 3.5% to treasury |
+| | 2 | Standard 8-player happy path | 60/25/15 split + fee math |
+| | 3 | Cancel + refund (4 players) | Vault drains to zero; all 4 entry fees returned to original ATAs |
+| | 4 | Bye 7-player tournament | Non-power-of-2 bracket; bye matches Completed at init; advancement works |
+| | 5 | 128-player chunked start | `start_tournament` succeeds across 19 chunks; per-chunk compute budget under limit; status flips to `Active` only after final chunk |
+| `tests/organizer-deposit.test.ts` | 6 | Pre-start deposit refund on cancel | `organizer_deposit > 0` flow: cancel from `Registration` returns deposit + every entry fee |
+| | 7 | Refund idempotency | Re-running cancel chunks is a no-op via `organizer_deposit_refunded` flag |
+| | 8 | Variant A deposit refund on final | `report_result` final match refunds deposit out of band, distributes prize on `vault.amount − organizer_deposit` |
+| `tests/capacity-128p-deep.test.ts` | 9 | 128p Deep full-bracket → final | Bracket inits + every match reports + 7-slot payout distributes correctly |
+| | 10 | CU baseline sampling | `meta.computeUnitsConsumed` recorded for representative ix; baseline lives in `CU_BUDGET.md` |
 
 `tests/utils.ts` exposes `sendStartChunks` which wraps each chunk tx with `ComputeBudgetProgram.setComputeUnitLimit(1_400_000)`. Treat this as the SDK's pattern for the `startTournament` flow.
 
-Tier-4 coverage (Phase 0 Section 3.4):
-
-- `tests/organizer-deposit.test.ts` — 3 tests covering pre-start refund, idempotency, and Variant A deposit refund on `report_result` final-match.
-- `tests/capacity-128p-deep.test.ts` — 128 players, Deep payout preset, full bracket → final, with `meta.computeUnitsConsumed` sampling on representative ix.
-- CU baseline numbers committed in `CU_BUDGET.md`. Phase 1 redeploy ceremony re-runs the suite and diffs against the file as a regression contract.
+`CU_BUDGET.md` is the regression contract — Phase 1 redeploy ceremony re-runs the suite and diffs computeUnitsConsumed against the file. Drift triggers a review before re-publishing the SDK.
 
 ## Codama codegen
 
@@ -205,7 +207,7 @@ The SDK + Indexer consume typed accounts/instructions generated from `target/idl
 make codama-generate   # rebuilds IDL, regenerates ../BracketChain-Sdk/src/generated and ../BracketChain-Indexer/src/generated
 ```
 
-Sibling repos expected as peers (`../BracketChain-Sdk`, `../BracketChain-Indexer`). The generated trees should be committed in each consumer repo so a CI gate can detect drift (drift gate itself is deferred to cross-repo CI design — see `plan_tasks/bracketchain-phase-0-foundation.md` Section 2.6).
+Sibling repos expected as peers (`../BracketChain-Sdk`, `../BracketChain-Indexer`). The generated trees are committed in each consumer repo so a CI gate can detect drift — drift gate itself is deferred to cross-repo CI design.
 
 ---
 
@@ -214,18 +216,24 @@ Sibling repos expected as peers (`../BracketChain-Sdk`, `../BracketChain-Indexer
 Devnet only in MVP. Mainnet deploy is gated on migration to a Squads 2-of-3 multisig upgrade authority — see the main repo's MVP-vs-V1 deltas.
 
 ```bash
-make deploy-devnet                                          # default RPC
-make deploy-devnet RPC_DEVNET="https://devnet.helius-rpc.com/?api-key=YOUR_KEY"
+# 1. Compile + emit IDL
+anchor build
+
+# 2. Deploy to devnet (uses Anchor.toml [provider] keypair + cluster)
+anchor deploy --provider.cluster devnet
+
+# 3. Initialize ProtocolConfig singleton — idempotent (reads first, skips if already initialized)
+cd ../BracketChain-Sdk
+pnpm tsx scripts/init-protocol.ts --rpc=https://api.devnet.solana.com
+# or with a custom RPC:
+# pnpm tsx scripts/init-protocol.ts --rpc=https://devnet.helius-rpc.com/?api-key=YOUR_KEY
 ```
 
-`deploy-devnet` runs `anchor deploy --provider.cluster devnet`, then invokes `pnpm tsx scripts/init-protocol.ts --rpc=$RPC_DEVNET` from the SDK repo. The init script is idempotent — it reads `ProtocolConfig` first and skips if already initialized.
-
-Other targets:
+After a fresh deploy, regenerate Codama trees + republish the SDK if the IDL changed:
 
 ```bash
-make init-devnet      # run init-protocol only (skip deploy) — use after a redeploy that left state intact
-make verify-devnet    # fetch ProtocolConfig from devnet and print fields (sanity check)
-make redeploy-devnet  # alias for deploy-devnet (init re-runs idempotent)
+make codama-generate
+cd ../BracketChain-Sdk && pnpm build && pnpm publish --access public
 ```
 
 ---
@@ -236,7 +244,7 @@ make redeploy-devnet  # alias for deploy-devnet (init re-runs idempotent)
 .
 ├── Anchor.toml              # cluster config, program IDs, scripts
 ├── Cargo.toml               # workspace
-├── Makefile                 # build / test / deploy / sync-idl recipes
+├── Makefile                 # build / idl / codama-generate recipes (sync-idl is a deprecation alias)
 ├── programs/
 │   └── bracket-chain/
 │       ├── Cargo.toml
@@ -248,8 +256,12 @@ make redeploy-devnet  # alias for deploy-devnet (init re-runs idempotent)
 │           ├── instructions/    # one file per instruction
 │           └── state/           # one file per account type
 ├── tests/
-│   ├── bracket-chain.ts     # 5 mocha tests
-│   └── utils.ts             # test helpers (compute-budget wrap, ATA setup, etc.)
+│   ├── bracket-chain.ts          # 5 demo-path tests
+│   ├── organizer-deposit.test.ts # 3 deposit-flow tests (Variant A)
+│   ├── capacity-128p-deep.test.ts# 2 tests — 128p Deep bracket + CU sampling
+│   └── utils.ts                  # test helpers (compute-budget wrap, ATA setup, etc.)
+├── CU_BUDGET.md             # compute-unit baseline — regression contract for redeploy
+├── codama.json              # Codama codegen config for sibling SDK + indexer
 ├── target/                  # gitignored — anchor build output, IDL
 ├── migrations/              # Anchor migrations dir (unused — see Makefile comments)
 ├── app/                     # Anchor scaffolding placeholder (unused)
