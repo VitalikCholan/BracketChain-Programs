@@ -1,0 +1,112 @@
+# BracketChain-Sdk — план робіт
+
+> TypeScript SDK, tsup CJS+ESM. Path: `/home/min/git-workspace/BracketChain-Sdk/`.
+> Поточний стан: `@bracketchain/sdk@0.3.1` на npm. Hand-written, на `@coral-xyz/anchor`. Два класи: `BracketChainClient` (program wrapper) + `BracketChainIndexerClient` (REST wrapper). 21 typed `BracketChainSDKError` subclass + `mapError()` discriminator. Re-export BN.
+
+---
+
+## Phase 0 — Codama + Kit migration (~3-5 weeks solo)
+
+Це **paradigm shift** від Anchor `Program` class до `@solana/kit` builders. Рекомендується робити **per-file commits** для checkpoint-ів (Кроки 30, 31, 32, 33, 34, 35) — не один великий "rewrote SDK" commit на 15 файлів.
+
+### Stage 1 — Codama codegen (owned by BracketChain-Programs)
+
+- [ ] **Acceptance:** після `make codama-generate` в Programs репо, `src/generated/` створено в SDK з структурою `accounts/`, `errors/`, `instructions/`, `pdas/`, `programs/`, `types/`.
+- [ ] Закоммітити згенерований код (per Solana convention).
+
+### Stage 3 — Kit SDK rewrite
+
+- [ ] **Крок 29.** Stage 3.A — `pnpm add @solana/kit @solana/spl-token @solana-program/system @solana-program/token @solana-program/compute-budget`.
+- [ ] **Крок 30.** Stage 3.B — переписати `src/client.ts`: `BracketChainClient` тепер тримає:
+  - `rpc: Rpc<SolanaRpcApi>`
+  - optional `rpcSubscriptions: RpcSubscriptions<SolanaRpcSubscriptionsApi>`
+  - optional `signer: TransactionSigner`
+  - `programAddress: Address`
+  Видалити `AnchorProvider`, `Wallet`, `PublicKey`-from-web3.js.
+- [ ] **Крок 31.** Stage 3.C — переписати `src/types.ts`: re-export Codama-generated `Tournament`, `MatchNode`, `Participant`, `ProtocolConfig`, enums (`TournamentStatus`, `MatchStatus`, `PayoutPreset`). Додати `WithAddress<T>` wrapper.
+- [ ] **Крок 32.** Stage 3.D — переписати кожен `src/methods/*.ts` (5 method files):
+  - `createTournament.ts`
+  - `joinTournament.ts`
+  - `startTournament.ts` (chunked + compute-budget)
+  - `reportResult.ts` (`remaining_accounts` для final-match)
+  - `cancelTournament.ts` (chunked + `remaining_accounts`)
+- [ ] **Крок 33.** Stage 3.E — переписати `src/subscribe.ts` (якщо існує) на Kit RPC subscriptions: `rpcSubscriptions.accountNotifications(addr).subscribe({ abortSignal })`. Зберегти public API (`onError`, `kind: 'tournament' | 'match'`).
+- [ ] **Крок 34.** Stage 3.F — переписати `src/errors.ts`: замінити dead `AnchorError` branch з `mapError` на cause-chain walker для `SolanaError<SOLANA_ERROR__INSTRUCTION_ERROR__CUSTOM>`. Зберегти 21 typed `BracketChain*` error classes.
+- [ ] **Крок 35.** Stage 3.G — cleanup `src/index.ts`:
+  - видалити stale exports (`TournamentStatusKind`, `PublicKey` re-export, `getEnumKind`)
+  - додати re-exports Kit types
+  - видалити `src/idl/bracket_chain.json` + `src/idl/bracket_chain.ts` (бо тепер Codama-generated).
+
+### Stage 3 ship
+
+- [ ] **Крок 39.** Bump `package.json`: `0.3.1 → 0.4.0`. `pnpm publish` на npm.
+
+---
+
+## Phase 1 — SDK additions (post-redeploy, V1.1 + V1 + V1.2 + improvements)
+
+- [ ] **Крок 91.** SDK bump `0.4.0 → 0.5.0` (Phase 1 major). Method files для ~15 нових instructions:
+  - **V1.1:** `setSasConfig`, розширений `createTournament`, розширений `joinTournament` (with attestation).
+  - **V1 player-reported:** `requestSeed`, `revealSeed`, `proposeResult`, `confirmResult`, `disputeResult`, `claimResult`, `resolveDispute`, `forceClaimDisputed`.
+  - **V1.2 Oracle:** `setOracleConfig`, `commitMatchLobby`, `bindMatchFeed`, `proposeResultOracle`.
+  - **V1 improvements:** `closeTournament`, розширений `createTournament` для `PayoutPreset::Custom`.
+  - **V1 partial cancel:** `partialCancelTournament`, `partialRefundChunk`.
+
+---
+
+## Phase 2 — V1 SDK Hooks (`@bracketchain/sdk/react` subpath)
+
+- [ ] Створити `src/react/` subpath: `package.json` `exports`.
+- [ ] **3 hooks:**
+  - `useTournament(pda)` — підписка на Tournament account; re-render на match-report tx confirmation.
+  - `useBracket(pda)` — derived view (matches list з reconciliation з indexer).
+  - `useEscrow(pda)` — vault balance + payout state.
+- [ ] **Auto-resub on WebSocket disconnect** (Drift v2 pattern). Eliminates "the bracket sometimes gets stuck" UX.
+- [ ] Bump → `0.6.0`.
+
+---
+
+## Phase 3-4 — distribution
+
+### Widget (Phase 3, V2 distribution A)
+
+- [ ] Окремий npm package `@bracketchain/widget` (новий repo або subpath?).
+- [ ] React component `<BracketChainTournament pda={...} />`.
+- [ ] <80KB gzipped (CI gate).
+- [ ] CSS-vars theming, 3 preset themes.
+
+### Unity SDK (Phase 4, V2 distribution B)
+
+- [ ] C# wrapper, external browser wallet handoff, prefabs.
+
+---
+
+## Critical files (quick reference)
+
+**Phase 0 / Stage 3:**
+- `package.json` — додати `@solana/kit` deps, bump version
+- `src/client.ts` — Kit Rpc + TransactionSigner
+- `src/types.ts` — re-export Codama types
+- `src/methods/*.ts` — Kit builders
+- `src/errors.ts` — `SolanaError` cause-chain walker
+- `src/index.ts` — cleanup re-exports
+- `src/idl/` — DELETE (Codama replaces it)
+- `src/generated/` — generated by Codama from Programs
+
+**Phase 1:**
+- `src/methods/{requestSeed,revealSeed,proposeResult,...}.ts` — ~15 нових
+- `src/methods/{closeTournament,partialCancelTournament,partialRefundChunk}.ts`
+
+**Phase 2:**
+- `src/react/{useTournament,useBracket,useEscrow}.ts` — new subpath
+- `package.json` — додати `"./react"` export
+
+---
+
+## Sequencing
+
+1. **Programs Codama generation** ДО **Stage 3 (SDK rewrite)** — без `src/generated/` нічого не можна імпортувати.
+2. **Stage 3 → Stage 4 (frontend bridge)** — потім frontend може почати міграцію.
+3. **Stage 4** опціонально defer якщо ціль — devnet demo (frontend може жити на 0.3.1 поки 0.4.0 не стабілізується).
+
+★ **Insight з steps.md (110):** Кроки 29-38 — найризикованіша частина Phase 0. 4 дні чистого код-рoboти, paradigm shift від Anchor до Kit. Per-file commits (не один великий) для checkpoint-ів.
