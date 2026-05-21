@@ -22,6 +22,7 @@ import {
   findVaultPda,
   makeAtaOnly,
   makeFundedWallet,
+  measureCu,
   sendStartChunks,
   tokenBalance,
 } from "./utils";
@@ -151,6 +152,7 @@ describe("bracket-chain", function () {
         nextMatch: nextMatchPda,
         protocolConfig: protocolConfigPda,
         vault: vaultPda,
+        organizerTokenAccount: null,
         tokenProgram: TOKEN_PROGRAM_ID,
       })
       .signers([organizer])
@@ -172,7 +174,7 @@ describe("bracket-chain", function () {
       { pubkey: treasuryAta, isSigner: false, isWritable: true },
     ];
 
-    await program.methods
+    return await program.methods
       .reportResult(placements[0], placements)
       .accountsPartial({
         organizer: organizer.publicKey,
@@ -181,6 +183,7 @@ describe("bracket-chain", function () {
         nextMatch: null,
         protocolConfig: protocolConfigPda,
         vault: vaultPda,
+        organizerTokenAccount: null,
         tokenProgram: TOKEN_PROGRAM_ID,
       })
       .remainingAccounts(remaining)
@@ -216,7 +219,7 @@ describe("bracket-chain", function () {
 
     // Final
     const champion = playerKeys[0];
-    await reportFinal(
+    const finalSig = await reportFinal(
       organizer,
       tournamentPda,
       2,
@@ -237,6 +240,10 @@ describe("bracket-chain", function () {
     const t = await program.account.tournament.fetch(tournamentPda);
     expect(t.status).to.deep.equal({ completed: {} });
     expect(t.champion.toBase58()).to.equal(champion.toBase58());
+
+    const cu = await measureCu(provider.connection, finalSig);
+    console.log(`  [CU] report_result FINAL (WTA, 8p, 1 placement + treasury): ${cu}`);
+    expect(cu).to.be.lessThan(1_400_000);
   });
 
   // ───────────────────────────────────────────────────────────────────────────
@@ -270,7 +277,7 @@ describe("bracket-chain", function () {
 
     const placements = [playerKeys[0], playerKeys[4], playerKeys[2]];
     const placementAtas = [players[0].ata, players[4].ata, players[2].ata];
-    await reportFinal(organizer, tournamentPda, 2, placements, placementAtas, vaultPda);
+    const finalSig = await reportFinal(organizer, tournamentPda, 2, placements, placementAtas, vaultPda);
 
     const gross = 8n * BigInt(ENTRY_FEE.toString());
     const fee = (gross * 350n) / 10_000n;
@@ -286,6 +293,10 @@ describe("bracket-chain", function () {
     expect(treasuryAfter - treasuryBefore).to.equal(fee);
     // Vault drains (allow up to a few lamports of rounding remainder; bps math is exact for 8e6).
     expect(await tokenBalance(provider.connection, vaultPda)).to.equal(gross - p1 - p2 - p3 - fee);
+
+    const cu = await measureCu(provider.connection, finalSig);
+    console.log(`  [CU] report_result FINAL (Standard, 8p, 3 placements + treasury): ${cu}`);
+    expect(cu).to.be.lessThan(1_400_000);
   });
 
   // ───────────────────────────────────────────────────────────────────────────
@@ -305,7 +316,7 @@ describe("bracket-chain", function () {
       remaining.push({ pubkey: p.ata, isSigner: false, isWritable: true });
     }
 
-    await program.methods
+    const cancelSig = await program.methods
       .cancelTournament()
       .accountsPartial({
         caller: organizer.publicKey,
@@ -325,6 +336,10 @@ describe("bracket-chain", function () {
 
     const t = await program.account.tournament.fetch(tournamentPda);
     expect(t.status).to.deep.equal({ cancelled: {} });
+
+    const cu = await measureCu(provider.connection, cancelSig);
+    console.log(`  [CU] cancel_tournament (4 participants, single chunk, no deposit): ${cu}`);
+    expect(cu).to.be.lessThan(1_400_000);
   });
 
   // ───────────────────────────────────────────────────────────────────────────

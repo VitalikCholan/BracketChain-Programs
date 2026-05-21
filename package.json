@@ -9,6 +9,9 @@
     "@solana/spl-token": "^0.4.14"
   },
   "devDependencies": {
+    "@codama/cli": "^1.5.1",
+    "@codama/nodes-from-anchor": "^1.4.1",
+    "@codama/renderers-js": "^2.2.0",
     "@types/bn.js": "^5.1.0",
     "@types/chai": "^4.3.0",
     "@types/mocha": "^9.0.0",

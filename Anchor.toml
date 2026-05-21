@@ -6,13 +6,10 @@ resolution = true
 skip-lint = false
 
 [programs.devnet]
-bracket_chain = "AuXJKpuZtkegs2ZSgopgckhN7Ev8bUz4zBc238LD2F1"
+bracket_chain = "3YpkUKBh8288XN2dCKSwBnEdyc5UozSJ19A1ZCLpUZsZ"
 
 [programs.localnet]
-bracket_chain = "AuXJKpuZtkegs2ZSgopgckhN7Ev8bUz4zBc238LD2F1"
-
-[registry]
-url = "https://api.apr.dev"
+bracket_chain = "3YpkUKBh8288XN2dCKSwBnEdyc5UozSJ19A1ZCLpUZsZ"
 
 [provider]
 cluster = "devnet"
@@ -20,3 +17,5 @@ wallet = "~/.config/solana/id.json"
 
 [scripts]
 test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 \"tests/**/*.ts\""
+
+[hooks]
