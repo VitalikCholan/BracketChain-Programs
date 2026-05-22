@@ -2,9 +2,7 @@
 
 > **Phase 0 Section 3.4 deliverable.** Captures `meta.computeUnitsConsumed`
 > per instruction × preset on the current MVP program
-> (`AuXJKpuZtkegs2ZSgopgckhN7Ev8bUz4zBc238LD2F1` on devnet; local-test
-> validator measurement was taken against the synced local id
-> `3YpkUKBh8288XN2dCKSwBnEdyc5UozSJ19A1ZCLpUZsZ`).
+> (`AuXJKpuZtkegs2ZSgopgckhN7Ev8bUz4zBc238LD2F1` on devnet).
 >
 > Phase 1 redeploy (step 88) re-runs the `capacity-128p-deep` test and the
 > CU log lines emitted by `bracket-chain.ts` WTA/Standard/Cancel tests, then

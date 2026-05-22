@@ -10,8 +10,8 @@ This repo contains only the smart contracts. The full system spans five repos �
 
 | Field | Value |
 |---|---|
-| Program ID (devnet + localnet) | `3YpkUKBh8288XN2dCKSwBnEdyc5UozSJ19A1ZCLpUZsZ` |
-| Cluster | devnet — see [program account](https://explorer.solana.com/address/3YpkUKBh8288XN2dCKSwBnEdyc5UozSJ19A1ZCLpUZsZ?cluster=devnet) |
+| Program ID (devnet + localnet) | `AuXJKpuZtkegs2ZSgopgckhN7Ev8bUz4zBc238LD2F1` |
+| Cluster | devnet — see [program account](https://explorer.solana.com/address/AuXJKpuZtkegs2ZSgopgckhN7Ev8bUz4zBc238LD2F1?cluster=devnet) |
 | Anchor | 0.32.1 |
 | Solana | 2.x |
 | Tests | 10/10 passing (ts-mocha, see [Tests](#tests)) |
