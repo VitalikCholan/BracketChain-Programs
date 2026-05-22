@@ -25,14 +25,14 @@ import {
 } from "./utils";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Phase 0 Section 3.4 — `organizer_deposit` lifecycle coverage.
+// `organizer_deposit` lifecycle coverage.
 // Three tests:
 //   1. Pre-start cancel refunds the deposit back to the organizer ATA.
 //   2. Calling `cancel_tournament` twice does not double-refund the deposit
 //      (idempotency guard via `organizer_deposit_refunded`).
-//   3. Variant A on `report_result` final-match: the deposit is excluded from
-//      the prize-pool basis (payouts + protocol fee apply to
-//      `vault - organizer_deposit` only) and refunded to the organizer ATA.
+//   3. Variant B on `report_result` final-match: the deposit stays in the
+//      vault and is included in the prize-pool basis (payouts + protocol
+//      fee apply to `vault.amount`, including the deposit). NOT refunded.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const ORGANIZER_DEPOSIT = new BN(5_000_000); // 5 USDC
@@ -220,9 +220,9 @@ describe("organizer-deposit", function () {
   });
 
   // ───────────────────────────────────────────────────────────────────────────
-  // 3. Variant A: deposit excluded from prize-pool basis on final-match
+  // 3. Variant B: deposit included in prize-pool basis on final-match
   // ───────────────────────────────────────────────────────────────────────────
-  it("excludes organizer_deposit from prize-pool basis and refunds it on final-match", async () => {
+  it("includes organizer_deposit in prize-pool basis and does not refund it on final-match", async () => {
     const { organizer, tournamentPda, vaultPda, players } = await createWithDeposit({
       name: "od-final-3",
       playerCount: 4,
@@ -253,7 +253,6 @@ describe("organizer-deposit", function () {
         nextMatch: finalMatch,
         protocolConfig: protocolConfigPda,
         vault: vaultPda,
-        organizerTokenAccount: null,
         tokenProgram: TOKEN_PROGRAM_ID,
       })
       .signers([organizer.keypair])
@@ -268,7 +267,6 @@ describe("organizer-deposit", function () {
         nextMatch: finalMatch,
         protocolConfig: protocolConfigPda,
         vault: vaultPda,
-        organizerTokenAccount: null,
         tokenProgram: TOKEN_PROGRAM_ID,
       })
       .signers([organizer.keypair])
@@ -294,15 +292,15 @@ describe("organizer-deposit", function () {
         nextMatch: null,
         protocolConfig: protocolConfigPda,
         vault: vaultPda,
-        organizerTokenAccount: organizer.ata,
         tokenProgram: TOKEN_PROGRAM_ID,
       })
       .remainingAccounts(remaining)
       .signers([organizer.keypair])
       .rpc();
 
-    // Variant A: basis = vault - deposit = 4 * entry_fee. Fee + payout apply to that.
-    const grossBasis = 4n * BigInt(ENTRY_FEE.toString());
+    // Variant B: basis = vault.amount = 4*entry_fee + deposit. Fee+payout apply to that.
+    const grossBasis =
+      4n * BigInt(ENTRY_FEE.toString()) + BigInt(ORGANIZER_DEPOSIT.toString());
     const expectedFee = (grossBasis * 350n) / 10_000n;
     const expectedChampion = grossBasis - expectedFee;
 
@@ -311,18 +309,17 @@ describe("organizer-deposit", function () {
     const championAfter = await tokenBalance(provider.connection, players[0].ata);
 
     expect(treasuryAfter - treasuryBefore).to.equal(expectedFee);
-    expect(organizerAfter - organizerBefore).to.equal(BigInt(ORGANIZER_DEPOSIT.toString()));
+    // Variant B: deposit stays in the pool — organizer balance unchanged on completion.
+    expect(organizerAfter - organizerBefore).to.equal(0n);
     expect(championAfter).to.equal(expectedChampion);
     expect(await tokenBalance(provider.connection, vaultPda)).to.equal(0n);
 
     const t = await program.account.tournament.fetch(tournamentPda);
     expect(t.status).to.deep.equal({ completed: {} });
     expect(t.champion.toBase58()).to.equal(playerKeys[0].toBase58());
-    expect(t.organizerDepositRefunded).to.equal(true);
+    // Refund flag only flips on the Cancelled path; completion leaves it false.
+    expect(t.organizerDepositRefunded).to.equal(false);
 
-    // TournamentCompleted.gross_pool must equal the basis, not the raw vault.
-    // (Sanity-checked here via on-chain state derivation; event introspection
-    // is the indexer's contract, not the program's.)
     expect(BigInt(t.entryFee.toString())).to.equal(BigInt(ENTRY_FEE.toString()));
   });
 });

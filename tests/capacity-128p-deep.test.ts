@@ -196,7 +196,6 @@ describe("capacity-128p-deep", function () {
                 nextMatch: nextMatchPda,
                 protocolConfig: protocolConfigPda,
                 vault: vaultPda,
-                organizerTokenAccount: null,
                 tokenProgram: TOKEN_PROGRAM_ID,
               })
               .signers([organizer.keypair])
@@ -251,7 +250,6 @@ describe("capacity-128p-deep", function () {
             nextMatch: null,
             protocolConfig: protocolConfigPda,
             vault: vaultPda,
-            organizerTokenAccount: organizer.ata,
             tokenProgram: TOKEN_PROGRAM_ID,
           })
           .remainingAccounts(remaining)
@@ -259,10 +257,11 @@ describe("capacity-128p-deep", function () {
           .rpc(),
       "report_result_FINAL",
     );
-    await record("report_result FINAL (Deep, 128p, +deposit refund)", finalSig);
+    await record("report_result FINAL (Deep, 128p, deposit in pool)", finalSig);
 
-    // ── 6. Variant A invariants: deposit refunded, basis = vault - deposit ─
-    const grossBasis = 128n * BigInt(ENTRY_FEE.toString());
+    // ── 6. Variant B invariants: deposit in pool, basis = vault.amount ────
+    const grossBasis =
+      128n * BigInt(ENTRY_FEE.toString()) + BigInt(ORGANIZER_DEPOSIT.toString());
     const feeExpected = (grossBasis * 350n) / 10_000n;
     const netExpected = grossBasis - feeExpected;
     const bps = [4000n, 2500n, 1500n, 1000n, 500n, 300n, 200n];
@@ -271,7 +270,8 @@ describe("capacity-128p-deep", function () {
     const treasuryAfter = await tokenBalance(conn, treasuryAta);
     const organizerAfter = await tokenBalance(conn, organizer.ata);
     expect(treasuryAfter - treasuryBefore).to.equal(feeExpected);
-    expect(organizerAfter - organizerBeforeFinal).to.equal(BigInt(ORGANIZER_DEPOSIT.toString()));
+    // Variant B: organizer does NOT get the deposit back on completion.
+    expect(organizerAfter - organizerBeforeFinal).to.equal(0n);
 
     expect(await tokenBalance(conn, players[0].ata)).to.equal(payouts[0]);
     // 7th place is the smallest, exercise the tail of the loop.
@@ -285,7 +285,8 @@ describe("capacity-128p-deep", function () {
     const t = await program.account.tournament.fetch(tournamentPda);
     expect(t.status).to.deep.equal({ completed: {} });
     expect(t.champion.toBase58()).to.equal(champion.toBase58());
-    expect(t.organizerDepositRefunded).to.equal(true);
+    // Variant B: refund flag stays false on completion (only cancel sets it).
+    expect(t.organizerDepositRefunded).to.equal(false);
 
     // ── 7. Print CU table for CU_BUDGET.md ingestion ───────────────────────
     console.log("\n=== CU baseline (capacity-128p-deep) ===");
@@ -383,7 +384,6 @@ describe("capacity-128p-deep", function () {
                   nextMatch: nextPda,
                   protocolConfig: protocolConfigPda,
                   vault: vaultPda,
-                  organizerTokenAccount: null,
                   tokenProgram: TOKEN_PROGRAM_ID,
                 })
                 .signers([organizer.keypair])
@@ -419,7 +419,6 @@ describe("capacity-128p-deep", function () {
               nextMatch: null,
               protocolConfig: protocolConfigPda,
               vault: vaultPda,
-              organizerTokenAccount: null,
               tokenProgram: TOKEN_PROGRAM_ID,
             })
             .remainingAccounts(remaining)
