@@ -48,7 +48,7 @@ Cancellation is allowed from `Registration` or `PendingBracketInit`. From `Activ
 | 2 | `create_tournament` | `name: String, entry_fee: u64, max_participants: u16, payout_preset: PayoutPreset, registration_deadline: i64, organizer_deposit: u64` | Creates `Tournament` PDA + PDA-owned vault TA. CPI from organizer's ATA → vault when `organizer_deposit > 0` (organizer ATA passed as optional account). Emits `TournamentCreated { ..., name, organizer_deposit }`. |
 | 3 | `join_tournament` | — | Transfers `entry_fee` from joiner's ATA → vault via SPL token CPI. Creates `Participant` PDA. Emits `ParticipantRegistered`. |
 | 4 | `start_tournament` | `chunk_index: u8, total_chunks: u8` | First call captures `seed_hash` from `slot_hashes[1..N]`, derives seeded bracket order, and inits matches in chunks. Idempotent — re-running a chunk that already ran is a no-op. Bye matches Completed at init (winner = the one player). Flips status to `Active` after the final chunk. Emits `TournamentStarted`. |
-| 5 | `report_result` | `winner: Pubkey, score_a: u16, score_b: u16` | Validates match `Active` and `winner ∈ {a, b}`. Non-final advances winner to next round's match slot. Final match: refunds `organizer_deposit` back to organizer (Variant A — deposit is excluded from the prize-pool basis), then distributes prize across placements per `PayoutPreset` (3rd–Nth recipients passed by organizer, validated against participant set) over `vault.amount − organizer_deposit`, takes 3.5% to treasury, flips status to `Completed`. Emits `MatchReported` per match + `RefundIssued` on the deposit refund + `TournamentCompleted { placement_payouts, treasury_recipient }` on final. The optional `organizer_token_account` account is required only when `organizer_deposit > 0`. |
+| 5 | `report_result` | `winner: Pubkey, placements: Vec<Pubkey>` | Validates match `Active` and `winner ∈ {a, b}`. Non-final advances winner to next round's match slot. Final match (Variant B): distributes the prize pool (`gross_pool = vault.amount`, includes `organizer_deposit` if any) across placements per `PayoutPreset` (3rd–Nth recipients passed by organizer, validated against participant set), takes 3.5% to treasury, flips status to `Completed`. The organizer deposit is **not** refunded on completion — it is part of the prize pool. Emits `MatchReported` per match + `TournamentCompleted { gross_pool, fee_amount, net_pool, placement_payouts, treasury_recipient }` on final. |
 | 6 | `cancel_tournament` | — | Two-tier authorization: organizer flips status to `Cancelled` (first call); any signer can drive subsequent refund chunks. Refunds entry fees back to participant ATAs + `organizer_deposit` back to organizer ATA (idempotent via `organizer_deposit_refunded` flag). Emits `TournamentCancelled` + `RefundIssued` per refund. Rejects from `Active` (matches already reported). |
 
 ---
@@ -107,9 +107,9 @@ Emitted via Anchor `emit!()`. Indexer + SDK consume these via `BorshCoder` over 
 | `ParticipantRegistered { tournament, wallet, seed_index }` | `join_tournament` |
 | `TournamentStarted { tournament, seed_hash }` | `start_tournament` (final chunk only) |
 | `MatchReported { tournament, round, match_index, winner, score_a, score_b }` | `report_result` |
-| `TournamentCompleted { tournament, champion, placement_payouts, treasury_recipient }` | `report_result` (final match) |
+| `TournamentCompleted { tournament, champion, gross_pool, fee_amount, net_pool, completed_at, placement_payouts, treasury_recipient }` | `report_result` (final match) |
 | `TournamentCancelled { tournament }` | `cancel_tournament` (first call, status flip) |
-| `RefundIssued { tournament, recipient, amount, kind }` | `cancel_tournament` (per refund chunk; `kind` distinguishes entry-fee refund from organizer-deposit refund) |
+| `RefundIssued { tournament, wallet, amount }` | `cancel_tournament` (per refund chunk — emitted for each entry-fee refund and once for the organizer-deposit refund) |
 
 `TournamentCompleted.placement_payouts` is a `Vec<PlacementPayout { recipient, amount, place }>` carried in the event payload (Phase 5.2 path D — fixes the earlier indexer payout-row gap by avoiding a transaction-log scan).
 
@@ -152,6 +152,8 @@ Each preset's non-zero slot count must be `≤ max_participants` — `create_tou
 Net to placements: `prize_pool * (10_000 − PROTOCOL_FEE_BPS) / 10_000` = 96.5%.
 Treasury: `prize_pool * PROTOCOL_FEE_BPS / 10_000` = 3.5%.
 
+`prize_pool` on completion is `vault.amount`, i.e. `Σ entry_fee + organizer_deposit`. The organizer's deposit (Variant B) is a sponsored contribution to the pool — it stays in the vault on `report_result` final and is split between placements + treasury along with entry fees. The deposit is only refunded back to the organizer when the tournament is cancelled before any match is reported.
+
 ---
 
 ## Build
@@ -191,7 +193,7 @@ Ten tests across three files:
 | | 5 | 128-player chunked start | `start_tournament` succeeds across 19 chunks; per-chunk compute budget under limit; status flips to `Active` only after final chunk |
 | `tests/organizer-deposit.test.ts` | 6 | Pre-start deposit refund on cancel | `organizer_deposit > 0` flow: cancel from `Registration` returns deposit + every entry fee |
 | | 7 | Refund idempotency | Re-running cancel chunks is a no-op via `organizer_deposit_refunded` flag |
-| | 8 | Variant A deposit refund on final | `report_result` final match refunds deposit out of band, distributes prize on `vault.amount − organizer_deposit` |
+| | 8 | Variant B deposit goes to prize pool on final | `report_result` final match keeps deposit in the vault and distributes the prize on `vault.amount` (entry fees + deposit); organizer balance unchanged on completion |
 | `tests/capacity-128p-deep.test.ts` | 9 | 128p Deep full-bracket → final | Bracket inits + every match reports + 7-slot payout distributes correctly |
 | | 10 | CU baseline sampling | `meta.computeUnitsConsumed` recorded for representative ix; baseline lives in `CU_BUDGET.md` |
 
@@ -257,7 +259,7 @@ cd ../BracketChain-Sdk && pnpm build && pnpm publish --access public
 │           └── state/           # one file per account type
 ├── tests/
 │   ├── bracket-chain.ts          # 5 demo-path tests
-│   ├── organizer-deposit.test.ts # 3 deposit-flow tests (Variant A)
+│   ├── organizer-deposit.test.ts # 3 deposit-flow tests (Variant B — deposit funds the prize pool)
 │   ├── capacity-128p-deep.test.ts# 2 tests — 128p Deep bracket + CU sampling
 │   └── utils.ts                  # test helpers (compute-budget wrap, ATA setup, etc.)
 ├── CU_BUDGET.md             # compute-unit baseline — regression contract for redeploy

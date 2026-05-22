@@ -15,12 +15,11 @@ import {
   MatchInitDescriptor,
   buildBracketDescriptors,
   createUsdcLikeMint,
+  ensureProtocolInitialized,
   findMatchPda,
   findParticipantPda,
-  findProtocolConfigPda,
   findTournamentPda,
   findVaultPda,
-  makeAtaOnly,
   makeFundedWallet,
   measureCu,
   sendStartChunks,
@@ -45,27 +44,14 @@ describe("bracket-chain", function () {
   const programId = program.programId;
 
   let usdcMint: PublicKey;
-  let treasuryWallet: Keypair;
   let treasuryAta: PublicKey;
   let protocolConfigPda: PublicKey;
 
   before(async () => {
     usdcMint = await createUsdcLikeMint(provider);
-    treasuryWallet = Keypair.generate();
-    treasuryAta = await makeAtaOnly(provider, usdcMint, treasuryWallet.publicKey);
-
-    [protocolConfigPda] = findProtocolConfigPda(programId);
-
-    await program.methods
-      .initializeProtocol()
-      .accountsPartial({
-        authority: provider.wallet.publicKey,
-        protocolConfig: protocolConfigPda,
-        treasury: treasuryWallet.publicKey,
-        defaultMint: usdcMint,
-        systemProgram: SystemProgram.programId,
-      })
-      .rpc();
+    const init = await ensureProtocolInitialized(provider, program, usdcMint);
+    treasuryAta = init.treasuryAta;
+    protocolConfigPda = init.protocolConfigPda;
   });
 
   // Helper: create a tournament + register N players. Returns wallets + PDAs.
@@ -152,7 +138,6 @@ describe("bracket-chain", function () {
         nextMatch: nextMatchPda,
         protocolConfig: protocolConfigPda,
         vault: vaultPda,
-        organizerTokenAccount: null,
         tokenProgram: TOKEN_PROGRAM_ID,
       })
       .signers([organizer])
@@ -183,7 +168,6 @@ describe("bracket-chain", function () {
         nextMatch: null,
         protocolConfig: protocolConfigPda,
         vault: vaultPda,
-        organizerTokenAccount: null,
         tokenProgram: TOKEN_PROGRAM_ID,
       })
       .remainingAccounts(remaining)

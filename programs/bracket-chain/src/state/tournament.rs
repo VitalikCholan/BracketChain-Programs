@@ -52,15 +52,15 @@ pub struct Tournament {
     pub vault: Pubkey,
     pub entry_fee: u64,
     /// Optional organizer top-up transferred into the vault at creation.
-    /// `0` is allowed. Treated as a refundable commitment (Variant A):
-    /// returned to the organizer on `cancel_tournament` (pre-start) AND on
-    /// `report_result` final-match. The deposit is excluded from the
-    /// prize-pool basis — protocol fee + placement payouts apply to
-    /// `vault.amount - organizer_deposit` only.
+    /// `0` is allowed. Treated as a sponsored prize contribution (Variant B):
+    /// stays in the vault on completion and is distributed as part of the
+    /// prize-pool basis (`gross_pool = vault.amount`, including this deposit).
+    /// Refunded only on pre-start `cancel_tournament`.
     pub organizer_deposit: u64,
-    /// Set true once the deposit has been refunded — by `cancel_tournament`
-    /// (any-call, idempotent across chunks) or by `report_result` final-match.
-    /// Independent of per-participant `refund_paid` flags.
+    /// Set true once the deposit has been refunded by `cancel_tournament`
+    /// (any-call, idempotent across chunks). Only meaningful in the
+    /// `Cancelled` path — on `Completed`, the deposit goes to placements,
+    /// not back to the organizer, and this flag stays `false`.
     pub organizer_deposit_refunded: bool,
     pub max_participants: u16,
     pub bracket_size: u16,
