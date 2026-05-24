@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Token, TokenAccount, Transfer};
 
-use crate::constants::{PARTICIPANT_SEED, VAULT_SEED};
+use crate::constants::{EVENT_VERSION_V1, PARTICIPANT_SEED, VAULT_SEED};
 use crate::errors::BracketChainError;
 use crate::events::ParticipantRegistered;
 use crate::state::{Participant, Tournament, TournamentStatus};
@@ -93,6 +93,7 @@ pub(crate) fn handler(ctx: Context<JoinTournament>) -> Result<()> {
         .ok_or(BracketChainError::ArithmeticOverflow)?;
 
     emit!(ParticipantRegistered {
+        event_version: EVENT_VERSION_V1,
         tournament: tournament.key(),
         wallet: participant.wallet,
         participant_index,

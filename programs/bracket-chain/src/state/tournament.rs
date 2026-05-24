@@ -1,5 +1,6 @@
 use anchor_lang::prelude::*;
 
+use super::game::{SettlementMode, SupportedGame};
 use crate::constants::MAX_TOURNAMENT_NAME_LEN;
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, Debug, InitSpace)]
@@ -78,4 +79,19 @@ pub struct Tournament {
     pub champion: Pubkey,
     pub bump: u8,
     pub vault_bump: u8,
+    // ── V1.1 additions (appended — positional Borsh; never reorder above) ──
+    /// Game played; gates SAS identity requirement at `join_tournament`.
+    pub game: SupportedGame,
+    /// Who may report results. Locked at create-time.
+    pub settlement_mode: SettlementMode,
+    /// Dispute window (seconds) for PlayerReported / Oracle settlement. Unused
+    /// by OrganizerOnly. Wired by the V1 player-reported stage of this redeploy.
+    pub dispute_window_secs: u32,
+    /// Switchboard randomness account committed via `request_seed` (VRF stage).
+    pub vrf_randomness_account: Pubkey,
+    /// Slot the VRF commitment was made at; `reveal_seed` reads after it passes.
+    pub vrf_commit_slot: u64,
+    /// True once `reveal_seed` has populated `seed_hash` from VRF. Gates
+    /// `start_tournament` for non-OrganizerOnly tournaments.
+    pub seed_revealed: bool,
 }

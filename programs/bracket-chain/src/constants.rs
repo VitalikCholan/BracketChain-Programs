@@ -1,5 +1,11 @@
 use anchor_lang::prelude::*;
 
+/// Wire version stamped as the first field of every `#[event]` struct (C10).
+/// The indexer parser rejects events whose `event_version` differs, preventing
+/// silent Borsh mis-decode when the event layout changes in a future redeploy.
+#[constant]
+pub const EVENT_VERSION_V1: u8 = 1;
+
 #[constant]
 pub const PROTOCOL_FEE_BPS: u16 = 350;
 

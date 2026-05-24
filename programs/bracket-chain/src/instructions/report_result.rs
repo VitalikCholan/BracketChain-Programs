@@ -1,7 +1,9 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Token, TokenAccount, Transfer};
 
-use crate::constants::{BPS_DENOMINATOR, MATCH_SEED, PROTOCOL_FEE_BPS, TOURNAMENT_SEED, VAULT_SEED};
+use crate::constants::{
+    BPS_DENOMINATOR, EVENT_VERSION_V1, MATCH_SEED, PROTOCOL_FEE_BPS, TOURNAMENT_SEED, VAULT_SEED,
+};
 use crate::errors::BracketChainError;
 use crate::events::{MatchReported, PlacementPayout, RefundIssued, TournamentCompleted};
 use crate::state::{
@@ -22,7 +24,9 @@ pub struct ReportResult<'info> {
         ],
         bump = tournament.bump,
     )]
-    pub tournament: Account<'info, Tournament>,
+    // Boxed: V1.1 grew Tournament + ProtocolConfig; without heap-allocating
+    // these, `try_accounts` overflows the SBF 4KB stack frame.
+    pub tournament: Box<Account<'info, Tournament>>,
 
     #[account(
         mut,
@@ -46,7 +50,7 @@ pub struct ReportResult<'info> {
         seeds = [crate::constants::PROTOCOL_CONFIG_SEED],
         bump = protocol_config.bump,
     )]
-    pub protocol_config: Account<'info, ProtocolConfig>,
+    pub protocol_config: Box<Account<'info, ProtocolConfig>>,
 
     #[account(
         mut,
@@ -115,6 +119,7 @@ pub(crate) fn handler<'info>(
         .ok_or(BracketChainError::ArithmeticOverflow)?;
 
     emit!(MatchReported {
+        event_version: EVENT_VERSION_V1,
         tournament: tournament_key,
         round: match_round,
         match_index: match_idx,
@@ -150,6 +155,7 @@ pub(crate) fn handler<'info>(
         tournament.completed_at = now;
 
         emit!(TournamentCompleted {
+            event_version: EVENT_VERSION_V1,
             tournament: tournament_key,
             champion: winner,
             gross_pool,
@@ -223,6 +229,7 @@ fn refund_organizer_deposit_on_completion<'info>(
     ctx.accounts.vault.reload()?;
 
     emit!(RefundIssued {
+        event_version: EVENT_VERSION_V1,
         tournament: tournament_key,
         wallet: organizer_key,
         amount: organizer_deposit,

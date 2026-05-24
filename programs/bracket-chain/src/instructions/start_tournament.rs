@@ -2,7 +2,7 @@ use anchor_lang::prelude::*;
 use anchor_lang::solana_program::sysvar::slot_hashes;
 use anchor_lang::system_program;
 
-use crate::constants::{MATCH_SEED, MIN_PARTICIPANTS};
+use crate::constants::{EVENT_VERSION_V1, MATCH_SEED, MIN_PARTICIPANTS};
 use crate::errors::BracketChainError;
 use crate::events::TournamentStarted;
 use crate::state::{MatchNode, MatchStatus, Tournament, TournamentStatus};
@@ -196,6 +196,7 @@ pub(crate) fn handler<'info>(
         tournament.started_at = Clock::get()?.unix_timestamp;
 
         emit!(TournamentStarted {
+            event_version: EVENT_VERSION_V1,
             tournament: tournament_key,
             bracket_size: tournament.bracket_size,
             participant_count: tournament.participant_count,

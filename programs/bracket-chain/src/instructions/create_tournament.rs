@@ -2,11 +2,14 @@ use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
 
 use crate::constants::{
-    MAX_PARTICIPANTS, MAX_TOURNAMENT_NAME_LEN, MIN_PARTICIPANTS, TOURNAMENT_SEED, VAULT_SEED,
+    EVENT_VERSION_V1, MAX_PARTICIPANTS, MAX_TOURNAMENT_NAME_LEN, MIN_PARTICIPANTS, TOURNAMENT_SEED,
+    VAULT_SEED,
 };
 use crate::errors::BracketChainError;
 use crate::events::TournamentCreated;
-use crate::state::{PayoutPreset, ProtocolConfig, Tournament, TournamentStatus};
+use crate::state::{
+    PayoutPreset, ProtocolConfig, SettlementMode, SupportedGame, Tournament, TournamentStatus,
+};
 
 #[derive(Accounts)]
 #[instruction(name: String)]
@@ -80,10 +83,19 @@ pub(crate) fn handler(
     payout_preset: PayoutPreset,
     registration_deadline: i64,
     organizer_deposit: u64,
+    game: SupportedGame,
+    settlement_mode: SettlementMode,
+    dispute_window_secs: u32,
 ) -> Result<()> {
     require!(
         name.as_bytes().len() <= MAX_TOURNAMENT_NAME_LEN,
         BracketChainError::NameTooLong
+    );
+    // Phase 1 accepts Manual (no identity) + Dota2 (SAS identity). The other
+    // SupportedGame variants are reserved schema-side and rejected at create.
+    require!(
+        matches!(game, SupportedGame::Manual | SupportedGame::Dota2),
+        BracketChainError::GameNotYetSupported
     );
     require!(
         max_participants >= MIN_PARTICIPANTS,
@@ -148,8 +160,16 @@ pub(crate) fn handler(
     tournament.champion = Pubkey::default();
     tournament.bump = ctx.bumps.tournament;
     tournament.vault_bump = ctx.bumps.vault;
+    // V1.1 fields
+    tournament.game = game;
+    tournament.settlement_mode = settlement_mode;
+    tournament.dispute_window_secs = dispute_window_secs;
+    tournament.vrf_randomness_account = Pubkey::default();
+    tournament.vrf_commit_slot = 0;
+    tournament.seed_revealed = false;
 
     emit!(TournamentCreated {
+        event_version: EVENT_VERSION_V1,
         tournament: tournament.key(),
         organizer: tournament.organizer,
         token_mint: tournament.token_mint,

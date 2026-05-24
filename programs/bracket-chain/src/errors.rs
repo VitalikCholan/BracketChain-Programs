@@ -73,4 +73,7 @@ pub enum BracketChainError {
 
     #[msg("slot_hashes sysvar is empty; cannot derive seed")]
     SlotHashesUnavailable,
+
+    #[msg("Selected game is not yet supported for tournament creation")]
+    GameNotYetSupported,
 }

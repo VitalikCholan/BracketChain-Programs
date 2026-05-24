@@ -2,6 +2,8 @@ use anchor_lang::prelude::*;
 
 #[event]
 pub struct TournamentCreated {
+    /// Event wire version (C10). Always first field. See `EVENT_VERSION_V1`.
+    pub event_version: u8,
     pub tournament: Pubkey,
     pub organizer: Pubkey,
     pub token_mint: Pubkey,
@@ -17,6 +19,7 @@ pub struct TournamentCreated {
 
 #[event]
 pub struct ParticipantRegistered {
+    pub event_version: u8,
     pub tournament: Pubkey,
     pub wallet: Pubkey,
     pub participant_index: u16,
@@ -24,6 +27,7 @@ pub struct ParticipantRegistered {
 
 #[event]
 pub struct TournamentStarted {
+    pub event_version: u8,
     pub tournament: Pubkey,
     pub bracket_size: u16,
     pub participant_count: u16,
@@ -33,6 +37,7 @@ pub struct TournamentStarted {
 
 #[event]
 pub struct MatchReported {
+    pub event_version: u8,
     pub tournament: Pubkey,
     pub round: u8,
     pub match_index: u16,
@@ -42,6 +47,7 @@ pub struct MatchReported {
 
 #[event]
 pub struct TournamentCompleted {
+    pub event_version: u8,
     pub tournament: Pubkey,
     pub champion: Pubkey,
     pub gross_pool: u64,
@@ -65,6 +71,7 @@ pub struct PlacementPayout {
 
 #[event]
 pub struct TournamentCancelled {
+    pub event_version: u8,
     pub tournament: Pubkey,
     pub authority: Pubkey,
     pub cancelled_at: i64,
@@ -72,6 +79,7 @@ pub struct TournamentCancelled {
 
 #[event]
 pub struct RefundIssued {
+    pub event_version: u8,
     pub tournament: Pubkey,
     pub wallet: Pubkey,
     pub amount: u64,

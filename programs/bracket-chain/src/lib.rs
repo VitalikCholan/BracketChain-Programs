@@ -7,7 +7,7 @@ pub mod instructions;
 pub mod state;
 
 use instructions::*;
-use state::PayoutPreset;
+use state::{PayoutPreset, SettlementMode, SupportedGame};
 
 declare_id!("AuXJKpuZtkegs2ZSgopgckhN7Ev8bUz4zBc238LD2F1");
 
@@ -27,6 +27,9 @@ pub mod bracket_chain {
         payout_preset: PayoutPreset,
         registration_deadline: i64,
         organizer_deposit: u64,
+        game: SupportedGame,
+        settlement_mode: SettlementMode,
+        dispute_window_secs: u32,
     ) -> Result<()> {
         instructions::create_tournament::handler(
             ctx,
@@ -36,7 +39,18 @@ pub mod bracket_chain {
             payout_preset,
             registration_deadline,
             organizer_deposit,
+            game,
+            settlement_mode,
+            dispute_window_secs,
         )
+    }
+
+    pub fn set_sas_config(
+        ctx: Context<SetSasConfig>,
+        sas_credential: Pubkey,
+        sas_schemas: [Pubkey; 5],
+    ) -> Result<()> {
+        instructions::set_sas_config::handler(ctx, sas_credential, sas_schemas)
     }
 
     pub fn join_tournament(ctx: Context<JoinTournament>) -> Result<()> {

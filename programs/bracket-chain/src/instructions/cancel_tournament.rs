@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Token, TokenAccount, Transfer};
 
-use crate::constants::{TOURNAMENT_SEED, VAULT_SEED};
+use crate::constants::{EVENT_VERSION_V1, TOURNAMENT_SEED, VAULT_SEED};
 use crate::errors::BracketChainError;
 use crate::events::{RefundIssued, TournamentCancelled};
 use crate::state::{Participant, Tournament, TournamentStatus};
@@ -66,6 +66,7 @@ pub(crate) fn handler<'info>(
         );
         ctx.accounts.tournament.status = TournamentStatus::Cancelled;
         emit!(TournamentCancelled {
+            event_version: EVENT_VERSION_V1,
             tournament: tournament_key,
             authority: ctx.accounts.caller.key(),
             cancelled_at: now,
@@ -127,6 +128,7 @@ pub(crate) fn handler<'info>(
             ctx.accounts.tournament.organizer_deposit_refunded = true;
 
             emit!(RefundIssued {
+                event_version: EVENT_VERSION_V1,
                 tournament: tournament_key,
                 wallet: organizer_key,
                 amount: organizer_deposit,
@@ -184,6 +186,7 @@ pub(crate) fn handler<'info>(
         participant.try_serialize(&mut writer)?;
 
         emit!(RefundIssued {
+            event_version: EVENT_VERSION_V1,
             tournament: tournament_key,
             wallet: participant.wallet,
             amount: entry_fee,
