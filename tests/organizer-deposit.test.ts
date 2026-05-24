@@ -76,6 +76,9 @@ describe("organizer-deposit", function () {
         opts.payoutPreset,
         deadline,
         opts.deposit,
+        { manual: {} }, // game: Manual
+        { organizerOnly: {} }, // settlement_mode
+        0, // dispute_window_secs
       )
       .accountsPartial({
         organizer: organizer.keypair.publicKey,
@@ -100,9 +103,11 @@ describe("organizer-deposit", function () {
         .accountsPartial({
           player: w.keypair.publicKey,
           tournament: tournamentPda,
+          protocolConfig: protocolConfigPda,
           participant: participantPda,
           playerTokenAccount: w.ata,
           vault: vaultPda,
+          gameIdentityAttestation: null,
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
         })

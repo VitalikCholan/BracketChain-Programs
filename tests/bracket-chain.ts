@@ -91,6 +91,9 @@ describe("bracket-chain", function () {
         opts.payoutPreset,
         deadline,
         new BN(0),
+        { manual: {} }, // game: Manual (no SAS identity required)
+        { organizerOnly: {} }, // settlement_mode
+        0, // dispute_window_secs
       )
       .accountsPartial({
         organizer: organizer.publicKey,
@@ -115,9 +118,11 @@ describe("bracket-chain", function () {
         .accountsPartial({
           player: w.keypair.publicKey,
           tournament: tournamentPda,
+          protocolConfig: protocolConfigPda,
           participant: participantPda,
           playerTokenAccount: w.ata,
           vault: vaultPda,
+          gameIdentityAttestation: null, // Manual game — no attestation
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
         })

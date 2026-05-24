@@ -192,7 +192,14 @@ async function getOrCreateAtaWithRetry(
   let lastErr: unknown = null;
   for (let i = 0; i < attempts; i++) {
     try {
-      return await getOrCreateAssociatedTokenAccount(connection, payer, mint, owner, "confirmed");
+      return await getOrCreateAssociatedTokenAccount(
+        connection,
+        payer,
+        mint,
+        owner,
+        false, // allowOwnerOffCurve
+        "confirmed", // commitment (was mistakenly passed in the allowOwnerOffCurve slot)
+      );
     } catch (e) {
       lastErr = e;
       await new Promise((resolve) => setTimeout(resolve, 200 * (i + 1)));
