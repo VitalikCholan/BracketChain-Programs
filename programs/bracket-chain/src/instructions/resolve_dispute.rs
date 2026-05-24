@@ -1,14 +1,20 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{Token, TokenAccount};
 
-use crate::constants::{MATCH_SEED, TOURNAMENT_SEED, VAULT_SEED};
+use crate::constants::{
+    EVENT_VERSION_V1, MATCH_SEED, PARTICIPANT_SEED, TOURNAMENT_SEED, VAULT_SEED,
+};
 use crate::errors::BracketChainError;
-use crate::instructions::settlement::finalize_match;
-use crate::state::{MatchNode, ProtocolConfig, Tournament};
+use crate::events::DisputeResolved;
+use crate::instructions::settlement::{credit_match_stats, finalize_match};
+use crate::state::{MatchNode, Participant, ProtocolConfig, Tournament};
 
+/// The organizer (arbitrator) settles a disputed match, choosing the winner.
+/// May be called any time after a dispute is raised — it is the organizer's
+/// counterpart to the players' `force_claim_disputed` backstop.
 #[derive(Accounts)]
-pub struct ReportResult<'info> {
-    #[account(mut, address = tournament.organizer @ BracketChainError::UnauthorizedAuthority)]
+pub struct ResolveDispute<'info> {
+    #[account(address = tournament.organizer @ BracketChainError::UnauthorizedAuthority)]
     pub organizer: Signer<'info>,
 
     #[account(
@@ -20,8 +26,6 @@ pub struct ReportResult<'info> {
         ],
         bump = tournament.bump,
     )]
-    // Boxed: V1.1 grew Tournament + ProtocolConfig; without heap-allocating
-    // these, `try_accounts` overflows the SBF 4KB stack frame.
     pub tournament: Box<Account<'info, Tournament>>,
 
     #[account(
@@ -39,9 +43,14 @@ pub struct ReportResult<'info> {
     )]
     pub match_account: Account<'info, MatchNode>,
 
-    /// Required for non-final matches; pass `None` when reporting the final.
     #[account(mut)]
     pub next_match: Option<Account<'info, MatchNode>>,
+
+    #[account(mut, seeds = [PARTICIPANT_SEED, tournament.key().as_ref(), match_account.player_a.as_ref()], bump = participant_a.bump)]
+    pub participant_a: Box<Account<'info, Participant>>,
+
+    #[account(mut, seeds = [PARTICIPANT_SEED, tournament.key().as_ref(), match_account.player_b.as_ref()], bump = participant_b.bump)]
+    pub participant_b: Box<Account<'info, Participant>>,
 
     #[account(
         seeds = [crate::constants::PROTOCOL_CONFIG_SEED],
@@ -57,11 +66,6 @@ pub struct ReportResult<'info> {
     )]
     pub vault: Account<'info, TokenAccount>,
 
-    /// Organizer's ATA in the tournament's token mint. Required on final-match
-    /// when `tournament.organizer_deposit > 0` and the deposit has not been
-    /// refunded yet (Variant A — deposit is excluded from the prize-pool
-    /// basis). Pass `None` for non-final reports or when the deposit is `0`.
-    /// Mint + owner are validated by Anchor (constraints auto-skip when None).
     #[account(
         mut,
         constraint = organizer_token_account.mint == tournament.token_mint
@@ -74,18 +78,25 @@ pub struct ReportResult<'info> {
     pub token_program: Program<'info, Token>,
 }
 
-/// OrganizerOnly settlement: the organizer reports the winner directly. The
-/// shared `finalize_match` performs all validation, bracket advancement, and
-/// (on the final match) prize distribution. The proposal envelope is never
-/// touched in this mode.
 pub(crate) fn handler<'info>(
-    mut ctx: Context<'_, '_, '_, 'info, ReportResult<'info>>,
+    mut ctx: Context<'_, '_, '_, 'info, ResolveDispute<'info>>,
     winner: Pubkey,
     placements: Vec<Pubkey>,
 ) -> Result<()> {
-    let now = Clock::get()?.unix_timestamp;
+    let arbitrator = ctx.accounts.organizer.key();
     let accs = &mut ctx.accounts;
 
+    require!(accs.match_account.disputed, BracketChainError::ProposalNotDisputed);
+
+    let (tournament_key, bracket, round, match_index) = (
+        accs.match_account.tournament,
+        accs.match_account.bracket,
+        accs.match_account.round,
+        accs.match_account.match_index,
+    );
+    let now = Clock::get()?.unix_timestamp;
+
+    // `finalize_match` enforces winner ∈ {player_a, player_b}.
     finalize_match(
         &mut accs.tournament,
         &mut accs.match_account,
@@ -99,6 +110,19 @@ pub(crate) fn handler<'info>(
         &placements,
         now,
     )?;
+
+    credit_match_stats(&mut accs.participant_a, &mut accs.participant_b, winner)?;
+
+    emit!(DisputeResolved {
+        event_version: EVENT_VERSION_V1,
+        tournament: tournament_key,
+        bracket,
+        round,
+        match_index,
+        arbitrator,
+        winner,
+        resolved_at: now,
+    });
 
     Ok(())
 }

@@ -9,6 +9,9 @@ use crate::state::{MatchNode, MatchStatus, Tournament, TournamentStatus};
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
 pub struct MatchInitDescriptor {
+    /// Bracket lane — always `0` for single-elimination (V1). Part of the PDA
+    /// seed (C9). See `MatchNode::bracket`.
+    pub bracket: u8,
     pub round: u8,
     pub match_index: u16,
     pub bump: u8,
@@ -105,12 +108,14 @@ pub(crate) fn handler<'info>(
             BracketChainError::InvalidMatchIndex
         );
 
+        let bracket_arr = [descriptor.bracket];
         let round_arr = [descriptor.round];
         let match_index_le = descriptor.match_index.to_le_bytes();
         let bump_arr = [descriptor.bump];
         let signer_seeds: &[&[u8]] = &[
             MATCH_SEED,
             tournament_key.as_ref(),
+            &bracket_arr,
             &round_arr,
             &match_index_le,
             &bump_arr,
@@ -150,6 +155,7 @@ pub(crate) fn handler<'info>(
 
         let match_data = MatchNode {
             tournament: tournament_key,
+            bracket: descriptor.bracket,
             round: descriptor.round,
             match_index: descriptor.match_index,
             player_a: descriptor.player_a,
@@ -166,6 +172,15 @@ pub(crate) fn handler<'info>(
             status,
             bye: descriptor.bye,
             bump: descriptor.bump,
+            // Envelope starts empty; only the player-reported / Oracle flow
+            // ever populates it (OrganizerOnly uses `report_result` directly).
+            proposal_source: crate::state::ProposalSource::None,
+            proposer: Pubkey::default(),
+            proposed_winner: Pubkey::default(),
+            proposed_at: 0,
+            claim_deadline: 0,
+            disputed: false,
+            dispute_reason: 0,
         };
 
         let mut data = match_account.try_borrow_mut_data()?;

@@ -77,4 +77,53 @@ pub mod bracket_chain {
     ) -> Result<()> {
         instructions::cancel_tournament::handler(ctx)
     }
+
+    // ── Player-reported / Oracle settlement (Stage B) ──────────────────────
+
+    /// A match player records the result they claim, opening the dispute
+    /// window. Non-`OrganizerOnly` tournaments only.
+    pub fn propose_result(ctx: Context<ProposeResult>, proposed_winner: Pubkey) -> Result<()> {
+        instructions::propose_result::handler(ctx, proposed_winner)
+    }
+
+    /// The counterparty accepts the proposal, finalizing the match. Supply
+    /// `placements` + payout ATAs (remaining_accounts) when it is the final.
+    pub fn confirm_result<'info>(
+        ctx: Context<'_, '_, '_, 'info, ConfirmResult<'info>>,
+        placements: Vec<Pubkey>,
+    ) -> Result<()> {
+        instructions::confirm_result::handler(ctx, placements)
+    }
+
+    /// The counterparty rejects the proposal, escalating to the organizer.
+    pub fn dispute_result(ctx: Context<DisputeResult>, dispute_reason: u8) -> Result<()> {
+        instructions::dispute_result::handler(ctx, dispute_reason)
+    }
+
+    /// Permissionless: finalize an undisputed proposal after its dispute
+    /// window. Supply `placements` + payout ATAs when it is the final match.
+    pub fn claim_result<'info>(
+        ctx: Context<'_, '_, '_, 'info, PermissionlessFinalize<'info>>,
+        placements: Vec<Pubkey>,
+    ) -> Result<()> {
+        instructions::claim_result::handler(ctx, placements)
+    }
+
+    /// The organizer (arbitrator) settles a disputed match.
+    pub fn resolve_dispute<'info>(
+        ctx: Context<'_, '_, '_, 'info, ResolveDispute<'info>>,
+        winner: Pubkey,
+        placements: Vec<Pubkey>,
+    ) -> Result<()> {
+        instructions::resolve_dispute::handler(ctx, winner, placements)
+    }
+
+    /// Permissionless backstop: finalize a disputed match the organizer never
+    /// resolved, 24h after the dispute.
+    pub fn force_claim_disputed<'info>(
+        ctx: Context<'_, '_, '_, 'info, PermissionlessFinalize<'info>>,
+        placements: Vec<Pubkey>,
+    ) -> Result<()> {
+        instructions::force_claim_disputed::handler(ctx, placements)
+    }
 }

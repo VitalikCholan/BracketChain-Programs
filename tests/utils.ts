@@ -26,6 +26,7 @@ export const USDC_DECIMALS = 6;
 export const ENTRY_FEE = new BN(1_000_000); // 1 USDC
 
 export type MatchInitDescriptor = {
+  bracket: number;
   round: number;
   matchIndex: number;
   bump: number;
@@ -81,6 +82,7 @@ export function findMatchPda(
   round: number,
   matchIndex: number,
   programId: PublicKey,
+  bracket = 0,
 ): [PublicKey, number] {
   const matchIndexLe = Buffer.alloc(2);
   matchIndexLe.writeUInt16LE(matchIndex, 0);
@@ -88,6 +90,7 @@ export function findMatchPda(
     [
       Buffer.from("match"),
       tournament.toBuffer(),
+      Buffer.from([bracket]),
       Buffer.from([round]),
       matchIndexLe,
     ],
@@ -361,6 +364,7 @@ export function buildBracketDescriptors(
     const playerB = bye ? PublicKey.default : b;
     const [pda, bump] = findMatchPda(tournament, 0, m, programId);
     descriptors.push({
+      bracket: 0,
       round: 0,
       matchIndex: m,
       bump,
@@ -399,6 +403,7 @@ export function buildBracketDescriptors(
       // is correct.
       const [pda, bump] = findMatchPda(tournament, r, m, programId);
       descriptors.push({
+        bracket: 0,
         round: r,
         matchIndex: m,
         bump,

@@ -39,6 +39,9 @@ pub struct TournamentStarted {
 pub struct MatchReported {
     pub event_version: u8,
     pub tournament: Pubkey,
+    /// Bracket lane (C9). `0` for single-elimination (V1). The canonical
+    /// "advance the bracket" signal — emitted by every finalize path.
+    pub bracket: u8,
     pub round: u8,
     pub match_index: u16,
     pub winner: Pubkey,
@@ -83,4 +86,66 @@ pub struct RefundIssued {
     pub tournament: Pubkey,
     pub wallet: Pubkey,
     pub amount: u64,
+}
+
+// ── Player-reported / Oracle settlement envelope events (Stage B) ───────────
+// `MatchReported` remains the canonical "this match is final, advance the
+// bracket" signal emitted by every finalize path. The events below are the
+// notification-kernel granularity layered on top (B-14): who proposed, who
+// disputed, and how a pending result ultimately closed.
+
+#[event]
+pub struct ResultProposed {
+    pub event_version: u8,
+    pub tournament: Pubkey,
+    pub bracket: u8,
+    pub round: u8,
+    pub match_index: u16,
+    /// `ProposalSource` discriminant (1 = Player, 2 = Oracle, …).
+    pub source: u8,
+    pub proposer: Pubkey,
+    pub proposed_winner: Pubkey,
+    /// Deadline after which `claim_result` may permissionlessly finalize.
+    pub claim_deadline: i64,
+    pub proposed_at: i64,
+}
+
+#[event]
+pub struct ResultDisputed {
+    pub event_version: u8,
+    pub tournament: Pubkey,
+    pub bracket: u8,
+    pub round: u8,
+    pub match_index: u16,
+    pub disputer: Pubkey,
+    pub dispute_reason: u8,
+    /// Re-armed deadline after which `force_claim_disputed` may finalize.
+    pub force_claim_deadline: i64,
+    pub disputed_at: i64,
+}
+
+#[event]
+pub struct ResultClaimed {
+    pub event_version: u8,
+    pub tournament: Pubkey,
+    pub bracket: u8,
+    pub round: u8,
+    pub match_index: u16,
+    pub winner: Pubkey,
+    /// `true` when finalized via `force_claim_disputed` (post-dispute backstop)
+    /// rather than the ordinary undisputed `claim_result`.
+    pub forced: bool,
+    pub claimed_at: i64,
+}
+
+#[event]
+pub struct DisputeResolved {
+    pub event_version: u8,
+    pub tournament: Pubkey,
+    pub bracket: u8,
+    pub round: u8,
+    pub match_index: u16,
+    pub arbitrator: Pubkey,
+    pub winner: Pubkey,
+    pub resolved_at: i64,
 }

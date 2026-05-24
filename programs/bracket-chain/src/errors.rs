@@ -97,4 +97,41 @@ pub enum BracketChainError {
 
     #[msg("Attestation account data is malformed")]
     MalformedAttestation,
+
+    // ── Player-reported / Oracle settlement (Stage B) ──────────────────────
+    #[msg("This action is not allowed for the tournament's settlement mode")]
+    SettlementModeMismatch,
+
+    #[msg("Signer is not a player in this match")]
+    NotPlayerInMatch,
+
+    #[msg("Only the counterparty may confirm or dispute this proposal")]
+    NotCounterparty,
+
+    #[msg("Match has no pending proposal")]
+    NoProposal,
+
+    #[msg("Match already has a pending proposal")]
+    ProposalAlreadyExists,
+
+    #[msg("Proposed winner is not a player in this match")]
+    InvalidProposedWinner,
+
+    #[msg("Claim window has not elapsed yet")]
+    ClaimWindowNotElapsed,
+
+    #[msg("Proposal is disputed; it cannot be claimed")]
+    ProposalDisputed,
+
+    #[msg("Proposal is not disputed")]
+    ProposalNotDisputed,
+
+    #[msg("Tournament seed has not been revealed; start is gated on VRF")]
+    SeedNotRevealed,
+
+    #[msg("Switchboard randomness is not yet resolved for this slot")]
+    RandomnessNotResolved,
+
+    #[msg("Provided randomness account does not match the tournament commitment")]
+    RandomnessAccountMismatch,
 }

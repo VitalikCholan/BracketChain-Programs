@@ -18,6 +18,12 @@ pub const MIN_PARTICIPANTS: u16 = 2;
 #[constant]
 pub const MAX_PARTICIPANTS: u16 = 128;
 
+/// Grace period after a dispute before `force_claim_disputed` lets anyone
+/// finalize the proposed winner — the trustless backstop against an organizer
+/// who never calls `resolve_dispute`. 24 hours.
+#[constant]
+pub const FORCE_CLAIM_WINDOW_SECS: i64 = 86_400;
+
 pub const MAX_TOURNAMENT_NAME_LEN: usize = 32;
 
 pub const PROTOCOL_CONFIG_SEED: &[u8] = b"protocol_config";
