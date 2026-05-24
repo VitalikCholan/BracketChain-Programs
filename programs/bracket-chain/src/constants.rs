@@ -37,6 +37,16 @@ pub const MATCH_SEED: &[u8] = b"match";
 pub const SAS_PROGRAM_ID: Pubkey =
     pubkey!("22zoJMtdu4tQc2PzL74ZUT7FrwgB1Udec8DdW4yw4BdG");
 
+/// Switchboard On-Demand program IDs (the owner of a `RandomnessAccountData`).
+/// `reveal_seed` / `request_seed` accept either so the same program binary works
+/// on devnet (V1 target) and mainnet. The crate's `is_devnet()` relies on an env
+/// var / build cfg that is not set inside the SBF runtime, so we check ownership
+/// against these explicit constants instead.
+pub const SWITCHBOARD_ON_DEMAND_DEVNET: Pubkey =
+    pubkey!("Aio4gaXjXzJNVLtzwtNVmSqGKpANtXhybbkhtAC94ji2");
+pub const SWITCHBOARD_ON_DEMAND_MAINNET: Pubkey =
+    pubkey!("SBondMDrcV3K4kxZR1HNVT7osZxAHVHgYXL5Ze1oMUv");
+
 pub const PAYOUT_WTA: [u16; 7] = [10_000, 0, 0, 0, 0, 0, 0];
 pub const PAYOUT_STANDARD: [u16; 7] = [6_000, 2_500, 1_500, 0, 0, 0, 0];
 pub const PAYOUT_DEEP: [u16; 7] = [4_000, 2_500, 1_500, 1_000, 500, 300, 200];

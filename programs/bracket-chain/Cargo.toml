@@ -23,6 +23,7 @@ custom-panic = []
 [dependencies]
 anchor-lang = "0.32.1"
 anchor-spl = { version = "0.32.1", features = ["token"] }
+switchboard-on-demand = "0.12.1"
 
 
 [lints.rust]

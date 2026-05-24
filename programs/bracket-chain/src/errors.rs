@@ -134,4 +134,19 @@ pub enum BracketChainError {
 
     #[msg("Provided randomness account does not match the tournament commitment")]
     RandomnessAccountMismatch,
+
+    #[msg("Randomness account is not owned by the Switchboard On-Demand program")]
+    InvalidRandomnessOwner,
+
+    #[msg("Randomness account data is malformed")]
+    MalformedRandomness,
+
+    #[msg("Tournament seed has already been revealed")]
+    SeedAlreadyRevealed,
+
+    #[msg("Account is not a Tournament owned by this program")]
+    InvalidTournamentAccount,
+
+    #[msg("Tournament account is already at the V1 layout; migration not needed")]
+    MigrationNotNeeded,
 }

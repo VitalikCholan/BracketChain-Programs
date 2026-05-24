@@ -62,11 +62,24 @@ pub(crate) fn handler<'info>(
             BracketChainError::MinParticipantsNotMet
         );
 
-        let data = ctx.accounts.slot_hashes.try_borrow_data()?;
-        require!(data.len() >= 48, BracketChainError::SlotHashesUnavailable);
-        let mut seed = [0u8; 32];
-        seed.copy_from_slice(&data[16..48]);
-        drop(data);
+        // Bracket seed source (B-5). If the organizer bound a Switchboard
+        // randomness account via `request_seed`, the VRF seed is mandatory and
+        // must already be revealed — `seed_hash` was written by `reveal_seed`,
+        // so we leave it untouched. Otherwise (opt-in fallback) we derive the
+        // seed from the SlotHashes sysvar as before.
+        if ctx.accounts.tournament.vrf_randomness_account != Pubkey::default() {
+            require!(
+                ctx.accounts.tournament.seed_revealed,
+                BracketChainError::SeedNotRevealed
+            );
+        } else {
+            let data = ctx.accounts.slot_hashes.try_borrow_data()?;
+            require!(data.len() >= 48, BracketChainError::SlotHashesUnavailable);
+            let mut seed = [0u8; 32];
+            seed.copy_from_slice(&data[16..48]);
+            drop(data);
+            ctx.accounts.tournament.seed_hash = seed;
+        }
 
         let pc = ctx.accounts.tournament.participant_count;
         let bracket_size = if pc.is_power_of_two() {
@@ -77,7 +90,6 @@ pub(crate) fn handler<'info>(
         };
 
         let tournament = &mut ctx.accounts.tournament;
-        tournament.seed_hash = seed;
         tournament.bracket_size = bracket_size;
         tournament.total_matches = bracket_size
             .checked_sub(1)

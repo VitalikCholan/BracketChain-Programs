@@ -78,6 +78,26 @@ pub mod bracket_chain {
         instructions::cancel_tournament::handler(ctx)
     }
 
+    /// Devnet upgrade-only: grow a pre-V1 Tournament account to the V1 layout.
+    /// Registration-phase tournaments only (see instruction docs).
+    pub fn migrate_v1_tournament(ctx: Context<MigrateV1Tournament>) -> Result<()> {
+        instructions::migrate_v1_tournament::handler(ctx)
+    }
+
+    // ── Verifiable bracket seeding (Switchboard On-Demand VRF, Stage B) ────
+
+    /// Bind a committed Switchboard randomness account to the tournament.
+    /// Opt-in; once bound, `start_tournament` requires the seed to be revealed.
+    pub fn request_seed(ctx: Context<RequestSeed>) -> Result<()> {
+        instructions::request_seed::handler(ctx)
+    }
+
+    /// Permissionless: consume the revealed randomness as the bracket seed.
+    /// Must be bundled with Switchboard's reveal in the same transaction.
+    pub fn reveal_seed(ctx: Context<RevealSeed>) -> Result<()> {
+        instructions::reveal_seed::handler(ctx)
+    }
+
     // ── Player-reported / Oracle settlement (Stage B) ──────────────────────
 
     /// A match player records the result they claim, opening the dispute
