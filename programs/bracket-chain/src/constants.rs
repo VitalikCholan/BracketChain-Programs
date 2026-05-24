@@ -26,6 +26,11 @@ pub const VAULT_SEED: &[u8] = b"vault";
 pub const PARTICIPANT_SEED: &[u8] = b"participant";
 pub const MATCH_SEED: &[u8] = b"match";
 
+/// Solana Attestation Service program ID (same on devnet + mainnet). Incoming
+/// game-identity attestations at `join_tournament` must be owned by this.
+pub const SAS_PROGRAM_ID: Pubkey =
+    pubkey!("22zoJMtdu4tQc2PzL74ZUT7FrwgB1Udec8DdW4yw4BdG");
+
 pub const PAYOUT_WTA: [u16; 7] = [10_000, 0, 0, 0, 0, 0, 0];
 pub const PAYOUT_STANDARD: [u16; 7] = [6_000, 2_500, 1_500, 0, 0, 0, 0];
 pub const PAYOUT_DEEP: [u16; 7] = [4_000, 2_500, 1_500, 1_000, 500, 300, 200];

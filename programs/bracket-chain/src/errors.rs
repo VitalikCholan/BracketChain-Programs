@@ -76,4 +76,25 @@ pub enum BracketChainError {
 
     #[msg("Selected game is not yet supported for tournament creation")]
     GameNotYetSupported,
+
+    #[msg("This game requires a SAS identity attestation to join")]
+    AttestationRequired,
+
+    #[msg("Attestation account is not owned by the SAS program")]
+    InvalidAttestationOwner,
+
+    #[msg("Attestation credential does not match the protocol's SAS credential")]
+    WrongAttestationCredential,
+
+    #[msg("Attestation schema does not match the game's SAS schema")]
+    WrongAttestationSchema,
+
+    #[msg("Attestation nonce does not bind to the joining wallet")]
+    AttestationWalletMismatch,
+
+    #[msg("Attestation has expired")]
+    AttestationExpired,
+
+    #[msg("Attestation account data is malformed")]
+    MalformedAttestation,
 }
