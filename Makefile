@@ -1,9 +1,10 @@
 # BracketChain-Programs build/codegen targets.
 #
-# Codama drives client generation for the sibling repos (SDK + Indexer).
+# Codama drives client generation for the SDK (single owner — F-0b).
 # Run `make codama-generate` after any IDL-affecting program change, then
-# commit the regenerated trees alongside the program diff so the indexer
-# parser + SDK builders stay in lockstep with on-chain accounts/ix.
+# commit the regenerated SDK tree alongside the program diff so the SDK
+# builders stay in lockstep with on-chain accounts/ix. The indexer decodes
+# events via its hand-typed BorshCoder parser + Prisma client, not Codama.
 
 .PHONY: build idl codama-generate sync-idl
 
@@ -14,9 +15,10 @@ build:
 idl:
 	anchor build
 
-# Regenerate Codama clients into ../BracketChain-Sdk/src/generated AND
-# ../BracketChain-Indexer/src/generated. Expects `codama.json` at the
-# repo root + sibling repos checked out as peers.
+# Regenerate the Codama client into ../BracketChain-Sdk/src/generated (flat).
+# NOTE: codama.json's first renderer arg is the PACKAGE FOLDER (where
+# package.json lives) — the renderer writes flat to <folder>/src/generated.
+# Pointing it at .../src/generated would nest to src/generated/src/generated.
 codama-generate: idl
 	npx codama run --all
 
