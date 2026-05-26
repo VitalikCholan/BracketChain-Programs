@@ -10,8 +10,9 @@ This repo contains only the smart contracts. The full system spans five repos �
 
 | Field | Value |
 |---|---|
-| Program ID (devnet + localnet) | `AuXJKpuZtkegs2ZSgopgckhN7Ev8bUz4zBc238LD2F1` |
-| Cluster | devnet — see [program account](https://explorer.solana.com/address/AuXJKpuZtkegs2ZSgopgckhN7Ev8bUz4zBc238LD2F1?cluster=devnet) |
+| Program ID — **MVP (live demo)** | `AuXJKpuZtkegs2ZSgopgckhN7Ev8bUz4zBc238LD2F1` — untouched; serves the Railway indexer + prod frontend |
+| Program ID — **Phase 1 (dev/integration)** | `3YpkUKBh8288XN2dCKSwBnEdyc5UozSJ19A1ZCLpUZsZ` — current `declare_id!`; upgraded in-place as Stages B–E land. Promoted to production at the Stage F ceremony. |
+| Cluster | devnet — [MVP](https://explorer.solana.com/address/AuXJKpuZtkegs2ZSgopgckhN7Ev8bUz4zBc238LD2F1?cluster=devnet) · [Phase 1 dev](https://explorer.solana.com/address/3YpkUKBh8288XN2dCKSwBnEdyc5UozSJ19A1ZCLpUZsZ?cluster=devnet) |
 | Anchor | 0.32.1 |
 | Solana | 2.x |
 | Tests | 10/10 passing (ts-mocha, see [Tests](#tests)) |
