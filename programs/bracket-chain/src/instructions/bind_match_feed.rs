@@ -58,10 +58,11 @@ pub struct BindMatchFeed<'info> {
 }
 
 pub(crate) fn handler(ctx: Context<BindMatchFeed>) -> Result<()> {
-    require!(
-        ctx.accounts.match_account.commitment.is_some(),
-        BracketChainError::MatchNotCommitted
-    );
+    let commitment = ctx
+        .accounts
+        .match_account
+        .commitment
+        .ok_or(error!(BracketChainError::MatchNotCommitted))?;
 
     // 1. Owner must be the Switchboard On-Demand program.
     let owner = ctx.accounts.switchboard_feed.owner;
@@ -71,7 +72,12 @@ pub(crate) fn handler(ctx: Context<BindMatchFeed>) -> Result<()> {
     );
 
     // 2. Feed must live on the protocol's configured queue (set via
-    //    `set_oracle_config`). Parsing also confirms the layout is a real feed.
+    //    `set_oracle_config`), and — the anti-redirection check (Layer 1) — its
+    //    `feed_hash` must equal the `expected_feed_hash` committed for this
+    //    match. The job schema bakes in `lobby_id` + both `player_*_game_id`, so
+    //    this cryptographically binds the feed to *these* identities/lobby. The
+    //    winner then arrives as a 0/1 index; identity is verified here, not in
+    //    the (range-limited) feed value. Parsing also confirms it's a real feed.
     {
         let data = ctx.accounts.switchboard_feed.data.borrow();
         let feed = PullFeedAccountData::parse(data)
@@ -79,6 +85,10 @@ pub(crate) fn handler(ctx: Context<BindMatchFeed>) -> Result<()> {
         require_keys_eq!(
             feed.queue,
             ctx.accounts.protocol_config.switchboard_queue,
+            BracketChainError::WrongFeedAccount
+        );
+        require!(
+            feed.feed_hash == commitment.expected_feed_hash,
             BracketChainError::WrongFeedAccount
         );
     }

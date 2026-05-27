@@ -41,6 +41,7 @@ pub struct DisputeResult<'info> {
 
 pub(crate) fn handler(ctx: Context<DisputeResult>, dispute_reason: u8) -> Result<()> {
     let disputer = ctx.accounts.disputer.key();
+    let arbitrator = ctx.accounts.tournament.arbitrator;
     let m = &mut ctx.accounts.match_account;
 
     require!(
@@ -48,13 +49,28 @@ pub(crate) fn handler(ctx: Context<DisputeResult>, dispute_reason: u8) -> Result
         BracketChainError::NoProposal
     );
     require!(!m.disputed, BracketChainError::ProposalDisputed);
-    require!(
-        disputer == m.player_a || disputer == m.player_b,
-        BracketChainError::NotPlayerInMatch
-    );
-    // Only the side that did *not* author the proposal may dispute it. (For an
-    // Oracle proposal the proposer is not a player, so either player qualifies.)
-    require!(disputer != m.proposer, BracketChainError::NotCounterparty);
+
+    // Who may dispute depends on the proposal's origin (C-7):
+    //  - Player proposal: only the counterparty (the non-proposing player).
+    //  - Oracle  proposal: either match player OR the tournament arbitrator
+    //    (the oracle proposer is a relayer, not a player).
+    let in_match = disputer == m.player_a || disputer == m.player_b;
+    match m.proposal_source {
+        ProposalSource::Player => {
+            require!(
+                in_match && disputer != m.proposer,
+                BracketChainError::NotCounterparty
+            );
+        }
+        ProposalSource::Oracle => {
+            require!(
+                in_match || disputer == arbitrator,
+                BracketChainError::NotAuthorized
+            );
+        }
+        // `None` is rejected above; `GameServer` is reserved (post-V1).
+        _ => return err!(BracketChainError::BadProposalSource),
+    }
 
     let now = Clock::get()?.unix_timestamp;
     let force_claim_deadline = now

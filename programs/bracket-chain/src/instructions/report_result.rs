@@ -4,7 +4,7 @@ use anchor_spl::token::{Token, TokenAccount};
 use crate::constants::{MATCH_SEED, TOURNAMENT_SEED, VAULT_SEED};
 use crate::errors::BracketChainError;
 use crate::instructions::settlement::finalize_match;
-use crate::state::{MatchNode, ProtocolConfig, Tournament};
+use crate::state::{MatchNode, ProtocolConfig, SettlementMode, Tournament};
 
 #[derive(Accounts)]
 pub struct ReportResult<'info> {
@@ -37,7 +37,10 @@ pub struct ReportResult<'info> {
         constraint = match_account.tournament == tournament.key()
             @ BracketChainError::InvalidMatchIndex,
     )]
-    pub match_account: Account<'info, MatchNode>,
+    // Boxed: V1.2 grew MatchNode (Oracle commitment + `expected_feed_hash`),
+    // pushing `try_accounts` over the SBF 4KB stack frame. Deref-coercion keeps
+    // the finalize_match call compatible.
+    pub match_account: Box<Account<'info, MatchNode>>,
 
     /// Required for non-final matches; pass `None` when reporting the final.
     #[account(mut)]
@@ -85,6 +88,32 @@ pub(crate) fn handler<'info>(
 ) -> Result<()> {
     let now = Clock::get()?.unix_timestamp;
     let accs = &mut ctx.accounts;
+
+    // Settlement-mode gate (C-7). `report_result` is the **OrganizerOnly**
+    // direct-report path — the organizer names the winner unilaterally. Reject
+    // it for PlayerReported and Oracle modes, where results are trustless:
+    // players/oracle `propose_result*` → `confirm_result`/`claim_result`, and
+    // contested matches go to the arbitrator via `dispute_result` →
+    // `resolve_dispute`. Allowing `report_result` there would let the organizer
+    // bypass the dispute machinery and overwrite a finalized winner.
+    //
+    // Why a flat "OrganizerOnly only" check (not the v1.2-plan's "Oracle unless
+    // disputed" carve-out):
+    //   1. Closes a pre-existing Stage B gap — there was NO settlement gate
+    //      here, so an organizer could already bypass PlayerReported settlement.
+    //   2. The plan's carve-out is redundant: a disputed match is resolved by
+    //      `resolve_dispute` (which also credits stats + emits `DisputeResolved`);
+    //      routing it through `report_result` instead would skip both and leave
+    //      the indexer inconsistent.
+    //   3. It is also insufficient for the real failure it targeted — an Oracle
+    //      match the feed never settles is stuck in Active with NO proposal, so
+    //      it can't be disputed, so "unless disputed" never fires. That genuine
+    //      escape-hatch belongs in a future arbitrator force-resolve ix, not in
+    //      a winner-overwriting organizer path.
+    require!(
+        accs.tournament.settlement_mode == SettlementMode::OrganizerOnly,
+        BracketChainError::SettlementModeMismatch
+    );
 
     finalize_match(
         &mut accs.tournament,

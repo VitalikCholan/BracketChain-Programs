@@ -167,6 +167,10 @@ pub(crate) fn handler(
     tournament.vrf_randomness_account = Pubkey::default();
     tournament.vrf_commit_slot = 0;
     tournament.seed_revealed = false;
+    // V1.2 (C-7): the arbitrator defaults to the organizer at create-time. It
+    // is only consulted in Oracle mode (`dispute_result`/`resolve_dispute`);
+    // a Squads-multisig reassignment ix is deferred to V1.3.
+    tournament.arbitrator = ctx.accounts.organizer.key();
 
     emit!(TournamentCreated {
         event_version: EVENT_VERSION_V1,

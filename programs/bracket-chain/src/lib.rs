@@ -72,8 +72,9 @@ pub mod bracket_chain {
     pub fn commit_match_lobby(
         ctx: Context<CommitMatchLobby>,
         lobby_id: [u8; 16],
+        expected_feed_hash: [u8; 32],
     ) -> Result<()> {
-        instructions::commit_match_lobby::handler(ctx, lobby_id)
+        instructions::commit_match_lobby::handler(ctx, lobby_id, expected_feed_hash)
     }
 
     /// Organizer (Stage C / V1.2): bind a Switchboard PullFeed to a committed match.

@@ -163,9 +163,6 @@ pub enum BracketChainError {
     #[msg("Oracle feed value did not match either committed player identity")]
     OracleWinnerNotInMatch,
 
-    #[msg("Organizer cannot report directly in Oracle settlement mode unless the match is disputed")]
-    OrganizerCannotReportInOracleMode,
-
     #[msg("Signer is not authorized to dispute this Oracle proposal")]
     NotAuthorized,
 

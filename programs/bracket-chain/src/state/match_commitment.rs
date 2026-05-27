@@ -2,15 +2,22 @@ use anchor_lang::prelude::*;
 
 /// Pre-match commitment binding an on-chain match to a real game lobby (Stage C
 /// / V1.2 Oracle settlement). Written by `commit_match_lobby` **before** the
-/// lobby launches, so the oracle cannot be redirected post-hoc: the Switchboard
-/// `OracleJob` is parameterized with `lobby_id` + both `player_*_game_id`, and
-/// `propose_result_oracle` verifies the feed's winning id hashes to one of the
-/// two committed ids.
+/// lobby launches.
+///
+/// **Anti-redirection (trust model).** The Switchboard `OracleJob` is
+/// parameterized with `lobby_id` + both `player_*_game_id`, so those identities
+/// are baked into the feed's `feed_hash` (SHA-256 of the job schema). We commit
+/// the off-chain-computed `expected_feed_hash` here, and `bind_match_feed`
+/// requires the bound feed's `feed_hash` to equal it — cryptographically tying
+/// the feed to *these two identities in this lobby*. The job then returns only
+/// the **winner index** (0 = player_a, 1 = player_b); identity is verified via
+/// the feed binding, not via the (range-limited) feed value. The dispute window
+/// + arbitrator is the ultimate backstop (the oracle is "just another
+/// proposer"). `feed.authority` pinning (Layer 2) is deferred.
 ///
 /// `player_*_game_id` are copied verbatim from each `Participant.identity_hash`
-/// — a 32-byte `SHA-256(steam_id_64 as u64 little-endian)` fingerprint (set by
-/// the indexer's SAS issuer in V1.1, A-9). The OracleJob must reproduce that
-/// exact hash, or every proposal fails `OracleWinnerNotInMatch`.
+/// (32-byte `SHA-256(steam_id_64 LE)`, A-9): they are the OracleJob query
+/// params (and the basis for `expected_feed_hash`) plus an audit record.
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, Debug, InitSpace)]
 pub struct MatchCommitment {
     /// Organizer-chosen pre-match identifier (frontend-generated random 16
@@ -21,6 +28,10 @@ pub struct MatchCommitment {
     pub player_a_game_id: [u8; 32],
     /// `participant_b.identity_hash` at commit time.
     pub player_b_game_id: [u8; 32],
+    /// SHA-256 of the OracleJob schema the feed-factory will run for this match
+    /// (computed off-chain from `lobby_id` + both `player_*_game_id`).
+    /// `bind_match_feed` enforces `feed.feed_hash == expected_feed_hash`.
+    pub expected_feed_hash: [u8; 32],
     pub committed_at: i64,
     pub committed_slot: u64,
 }

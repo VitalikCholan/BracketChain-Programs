@@ -59,7 +59,11 @@ pub struct CommitMatchLobby<'info> {
     pub participant_b: Box<Account<'info, Participant>>,
 }
 
-pub(crate) fn handler(ctx: Context<CommitMatchLobby>, lobby_id: [u8; 16]) -> Result<()> {
+pub(crate) fn handler(
+    ctx: Context<CommitMatchLobby>,
+    lobby_id: [u8; 16],
+    expected_feed_hash: [u8; 32],
+) -> Result<()> {
     require!(
         ctx.accounts.tournament.settlement_mode == SettlementMode::Oracle,
         BracketChainError::SettlementModeMismatch
@@ -89,6 +93,7 @@ pub(crate) fn handler(ctx: Context<CommitMatchLobby>, lobby_id: [u8; 16]) -> Res
         lobby_id,
         player_a_game_id,
         player_b_game_id,
+        expected_feed_hash,
         committed_at: now,
         committed_slot: clock.slot,
     });
