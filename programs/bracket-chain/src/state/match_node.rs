@@ -1,5 +1,6 @@
 use anchor_lang::prelude::*;
 
+use super::match_commitment::MatchCommitment;
 use super::proposal_source::ProposalSource;
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, Debug, InitSpace)]
@@ -53,4 +54,12 @@ pub struct MatchNode {
     /// Free-form reason code supplied by the disputer (`0` = unspecified).
     /// Surfaced by the indexer's notification kernel; not interpreted on-chain.
     pub dispute_reason: u8,
+    // ── V1.2 Oracle settlement (Stage C; appended — never reorder above) ────
+    /// Pre-match lobby/identity commitment, written by `commit_match_lobby`.
+    /// `None` for OrganizerOnly / PlayerReported matches.
+    pub commitment: Option<MatchCommitment>,
+    /// Switchboard On-Demand `PullFeedAccountData` PDA bound by
+    /// `bind_match_feed`; `propose_result_oracle` reads the winner from it.
+    /// `Pubkey::default()` (zero) ⇒ no feed bound.
+    pub switchboard_feed: Pubkey,
 }

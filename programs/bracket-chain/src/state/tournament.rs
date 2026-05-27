@@ -94,4 +94,8 @@ pub struct Tournament {
     /// True once `reveal_seed` has populated `seed_hash` from VRF. Gates
     /// `start_tournament` for non-OrganizerOnly tournaments.
     pub seed_revealed: bool,
+    // ── V1.2 Oracle settlement (Stage C; appended — never reorder above) ────
+    /// May dispute an Oracle proposal and call `resolve_dispute`. Defaults to
+    /// `organizer` at create-time (Squads multisig reassignment is V1.3).
+    pub arbitrator: Pubkey,
 }

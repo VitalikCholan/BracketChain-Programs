@@ -193,6 +193,10 @@ pub(crate) fn handler<'info>(
             claim_deadline: 0,
             disputed: false,
             dispute_reason: 0,
+            // V1.2 Oracle commitment is bound later (`commit_match_lobby` /
+            // `bind_match_feed`); unset for non-Oracle tournaments.
+            commitment: None,
+            switchboard_feed: Pubkey::default(),
         };
 
         let mut data = match_account.try_borrow_mut_data()?;

@@ -41,7 +41,12 @@ pub struct ResolveDispute<'info> {
         constraint = match_account.tournament == tournament.key()
             @ BracketChainError::InvalidMatchIndex,
     )]
-    pub match_account: Account<'info, MatchNode>,
+    // Boxed: V1.2 grew MatchNode (+`commitment`/`switchboard_feed`), pushing
+    // this struct's `try_accounts` over the SBF 4KB stack frame. Heap-allocate
+    // the larger of the two MatchNodes; deref-coercion keeps the finalize_match
+    // call compatible. (`next_match` stays unboxed — `&mut Option<Box<_>>`
+    // would not coerce to the `&mut Option<Account>` parameter.)
+    pub match_account: Box<Account<'info, MatchNode>>,
 
     #[account(mut)]
     pub next_match: Option<Account<'info, MatchNode>>,

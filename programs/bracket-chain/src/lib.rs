@@ -53,6 +53,21 @@ pub mod bracket_chain {
         instructions::set_sas_config::handler(ctx, sas_credential, sas_schemas)
     }
 
+    /// Admin (Stage C / V1.2): set Switchboard On-Demand settlement params.
+    pub fn set_oracle_config(
+        ctx: Context<SetOracleConfig>,
+        switchboard_queue: Pubkey,
+        max_stale_slots: u32,
+        min_oracle_samples: u32,
+    ) -> Result<()> {
+        instructions::set_oracle_config::handler(
+            ctx,
+            switchboard_queue,
+            max_stale_slots,
+            min_oracle_samples,
+        )
+    }
+
     pub fn join_tournament(ctx: Context<JoinTournament>) -> Result<()> {
         instructions::join_tournament::handler(ctx)
     }

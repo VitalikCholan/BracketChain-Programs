@@ -1,4 +1,5 @@
 pub mod game;
+pub mod match_commitment;
 pub mod match_node;
 pub mod participant;
 pub mod proposal_source;
@@ -6,6 +7,7 @@ pub mod protocol_config;
 pub mod tournament;
 
 pub use game::*;
+pub use match_commitment::*;
 pub use match_node::*;
 pub use participant::*;
 pub use proposal_source::*;
