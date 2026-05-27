@@ -68,6 +68,25 @@ pub mod bracket_chain {
         )
     }
 
+    /// Organizer (Stage C / V1.2): commit a match to a game lobby pre-launch.
+    pub fn commit_match_lobby(
+        ctx: Context<CommitMatchLobby>,
+        lobby_id: [u8; 16],
+    ) -> Result<()> {
+        instructions::commit_match_lobby::handler(ctx, lobby_id)
+    }
+
+    /// Organizer (Stage C / V1.2): bind a Switchboard PullFeed to a committed match.
+    pub fn bind_match_feed(ctx: Context<BindMatchFeed>) -> Result<()> {
+        instructions::bind_match_feed::handler(ctx)
+    }
+
+    /// Permissionless (Stage C / V1.2): write the oracle-reported winner into
+    /// the proposal envelope (`source = Oracle`).
+    pub fn propose_result_oracle(ctx: Context<ProposeResultOracle>) -> Result<()> {
+        instructions::propose_result_oracle::handler(ctx)
+    }
+
     pub fn join_tournament(ctx: Context<JoinTournament>) -> Result<()> {
         instructions::join_tournament::handler(ctx)
     }

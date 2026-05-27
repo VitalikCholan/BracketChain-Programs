@@ -149,4 +149,26 @@ pub enum BracketChainError {
 
     #[msg("Tournament account is already at the V1 layout; migration not needed")]
     MigrationNotNeeded,
+
+    // ── V1.2 Oracle settlement (Stage C) ───────────────────────────────────
+    #[msg("Match already has a lobby commitment")]
+    MatchAlreadyCommitted,
+
+    #[msg("Match has no lobby commitment; commit before binding a feed")]
+    MatchNotCommitted,
+
+    #[msg("Switchboard feed account is not owned by the On-Demand program, or is on the wrong queue")]
+    WrongFeedAccount,
+
+    #[msg("Oracle feed value did not match either committed player identity")]
+    OracleWinnerNotInMatch,
+
+    #[msg("Organizer cannot report directly in Oracle settlement mode unless the match is disputed")]
+    OrganizerCannotReportInOracleMode,
+
+    #[msg("Signer is not authorized to dispute this Oracle proposal")]
+    NotAuthorized,
+
+    #[msg("Proposal source is not valid for this action")]
+    BadProposalSource,
 }

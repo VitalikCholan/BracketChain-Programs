@@ -149,3 +149,31 @@ pub struct DisputeResolved {
     pub winner: Pubkey,
     pub resolved_at: i64,
 }
+
+// ── V1.2 Oracle settlement (Stage C) ────────────────────────────────────────
+// Only the commit/bind ceremony needs new events. The oracle *result* reuses
+// V1's `ResultProposed` (with `source = Oracle`); claim/dispute/resolve fire
+// V1's existing events unchanged — the indexer differentiates by `source`.
+
+#[event]
+pub struct MatchLobbyCommitted {
+    pub event_version: u8,
+    pub tournament: Pubkey,
+    pub bracket: u8,
+    pub round: u8,
+    pub match_index: u16,
+    /// Organizer-chosen pre-match lobby identifier (16 bytes).
+    pub lobby_id: [u8; 16],
+    pub committed_at: i64,
+}
+
+#[event]
+pub struct MatchFeedBound {
+    pub event_version: u8,
+    pub tournament: Pubkey,
+    pub bracket: u8,
+    pub round: u8,
+    pub match_index: u16,
+    /// Switchboard On-Demand `PullFeedAccountData` PDA bound to this match.
+    pub switchboard_feed: Pubkey,
+}
