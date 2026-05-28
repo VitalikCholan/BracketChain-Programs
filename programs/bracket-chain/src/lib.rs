@@ -119,6 +119,16 @@ pub mod bracket_chain {
         instructions::migrate_v1_tournament::handler(ctx)
     }
 
+    /// Admin one-shot: realloc `ProtocolConfig` from the pre-V1.1 layout
+    /// (107 bytes) to the current `INIT_SPACE`. Required after an in-place
+    /// upgrade across Stages B (SAS) / C (Oracle) when the existing PDA was
+    /// initialized under V1.0 and never grown. New bytes are zero-filled; the
+    /// authority follows up with `set_sas_config` / `set_oracle_config` to
+    /// populate the new fields.
+    pub fn migrate_protocol_config(ctx: Context<MigrateProtocolConfig>) -> Result<()> {
+        instructions::migrate_protocol_config::handler(ctx)
+    }
+
     // ── Verifiable bracket seeding (Switchboard On-Demand VRF, Stage B) ────
 
     /// Bind a committed Switchboard randomness account to the tournament.
