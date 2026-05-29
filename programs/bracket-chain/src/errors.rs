@@ -168,4 +168,8 @@ pub enum BracketChainError {
 
     #[msg("Proposal source is not valid for this action")]
     BadProposalSource,
+
+    // ── Stage D (program improvements; appended — never reorder above) ───────
+    #[msg("Custom payout split is invalid (bps must sum to 10000, be gapless, and fund the winner)")]
+    InvalidCustomPayout,
 }

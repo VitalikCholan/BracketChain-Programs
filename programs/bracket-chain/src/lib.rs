@@ -113,6 +113,16 @@ pub mod bracket_chain {
         instructions::cancel_tournament::handler(ctx)
     }
 
+    /// Permissionless rent reclaim for a terminal tournament (Stage D, D-3).
+    /// Closes child PDAs passed in `remaining_accounts`; `close_root` closes the
+    /// vault + Tournament PDA on the final call. All rent → organizer.
+    pub fn close_tournament<'info>(
+        ctx: Context<'_, '_, '_, 'info, CloseTournament<'info>>,
+        close_root: bool,
+    ) -> Result<()> {
+        instructions::close_tournament::handler(ctx, close_root)
+    }
+
     /// Devnet upgrade-only: grow a pre-V1 Tournament account to the V1 layout.
     /// Registration-phase tournaments only (see instruction docs).
     pub fn migrate_v1_tournament(ctx: Context<MigrateV1Tournament>) -> Result<()> {

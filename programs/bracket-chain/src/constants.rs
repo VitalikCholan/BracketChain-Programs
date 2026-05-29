@@ -47,6 +47,11 @@ pub const SWITCHBOARD_ON_DEMAND_DEVNET: Pubkey =
 pub const SWITCHBOARD_ON_DEMAND_MAINNET: Pubkey =
     pubkey!("SBondMDrcV3K4kxZR1HNVT7osZxAHVHgYXL5Ze1oMUv");
 
-pub const PAYOUT_WTA: [u16; 7] = [10_000, 0, 0, 0, 0, 0, 0];
-pub const PAYOUT_STANDARD: [u16; 7] = [6_000, 2_500, 1_500, 0, 0, 0, 0];
-pub const PAYOUT_DEEP: [u16; 7] = [4_000, 2_500, 1_500, 1_000, 500, 300, 200];
+/// Max payout placement slots. Custom presets carry exactly this many; the
+/// fixed presets are zero-padded to it. Widened 7 → 8 in Stage D (D-1) so a
+/// `Custom([u16;8])` can express up to 8 placements (gate G6).
+pub const MAX_PAYOUT_SLOTS: usize = 8;
+
+pub const PAYOUT_WTA: [u16; MAX_PAYOUT_SLOTS] = [10_000, 0, 0, 0, 0, 0, 0, 0];
+pub const PAYOUT_STANDARD: [u16; MAX_PAYOUT_SLOTS] = [6_000, 2_500, 1_500, 0, 0, 0, 0, 0];
+pub const PAYOUT_DEEP: [u16; MAX_PAYOUT_SLOTS] = [4_000, 2_500, 1_500, 1_000, 500, 300, 200, 0];

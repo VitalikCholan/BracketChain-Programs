@@ -1,6 +1,7 @@
 pub mod bind_match_feed;
 pub mod cancel_tournament;
 pub mod claim_result;
+pub mod close_tournament;
 pub mod commit_match_lobby;
 pub mod confirm_result;
 pub mod create_tournament;
@@ -24,6 +25,7 @@ pub mod start_tournament;
 pub use bind_match_feed::*;
 pub use cancel_tournament::*;
 pub use claim_result::*;
+pub use close_tournament::*;
 pub use commit_match_lobby::*;
 pub use confirm_result::*;
 pub use create_tournament::*;

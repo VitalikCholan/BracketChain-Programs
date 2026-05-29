@@ -177,3 +177,16 @@ pub struct MatchFeedBound {
     /// Switchboard On-Demand `PullFeedAccountData` PDA bound to this match.
     pub switchboard_feed: Pubkey,
 }
+
+/// Rent-reclaim progress for a terminal tournament (Stage D, D-3). Emitted on
+/// every `close_tournament` chunk; `root_closed` flips true on the final call
+/// that closes the vault + Tournament PDA itself.
+#[event]
+pub struct TournamentClosed {
+    pub event_version: u8,
+    pub tournament: Pubkey,
+    /// Child PDAs (MatchNode | Participant) closed in this call.
+    pub accounts_closed: u32,
+    /// True once the vault + Tournament PDA have been closed (terminal call).
+    pub root_closed: bool,
+}

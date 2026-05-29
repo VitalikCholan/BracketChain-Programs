@@ -17,6 +17,10 @@ pub enum PayoutPreset {
     WinnerTakesAll,
     Standard,
     Deep,
+    /// Organizer-defined basis-point split over up to `MAX_PAYOUT_SLOTS` (8)
+    /// placements. Validated at `create_tournament` (sum == 10_000, no gaps,
+    /// `slots[0] > 0`, `placement_count <= max_participants`). Stage D (D-1).
+    Custom([u16; crate::constants::MAX_PAYOUT_SLOTS]),
 }
 
 impl PayoutPreset {
@@ -25,19 +29,103 @@ impl PayoutPreset {
             PayoutPreset::WinnerTakesAll => 1,
             PayoutPreset::Standard => 3,
             PayoutPreset::Deep => 7,
+            // A custom split needs at least as many entrants as funded slots.
+            PayoutPreset::Custom(_) => self.placement_count() as u16,
         }
     }
 
-    pub fn basis_points(&self) -> [u16; 7] {
+    pub fn basis_points(&self) -> [u16; crate::constants::MAX_PAYOUT_SLOTS] {
         match self {
             PayoutPreset::WinnerTakesAll => crate::constants::PAYOUT_WTA,
             PayoutPreset::Standard => crate::constants::PAYOUT_STANDARD,
             PayoutPreset::Deep => crate::constants::PAYOUT_DEEP,
+            PayoutPreset::Custom(slots) => *slots,
         }
     }
 
     pub fn placement_count(&self) -> usize {
         self.basis_points().iter().filter(|bps| **bps > 0).count()
+    }
+
+    /// Validate a `Custom` split. No-op for the fixed presets (always valid).
+    /// Rules: every funded slot is contiguous from index 0 (no gaps), the
+    /// winner slot is funded, and the bps sum to exactly `BPS_DENOMINATOR`.
+    /// `placement_count <= max_participants` is checked by the caller (it owns
+    /// `max_participants`). Stage D (D-1).
+    pub fn validate_custom(&self) -> Result<()> {
+        let slots = match self {
+            PayoutPreset::Custom(slots) => slots,
+            _ => return Ok(()),
+        };
+        require!(slots[0] > 0, crate::errors::BracketChainError::InvalidCustomPayout);
+        // No gaps: once a zero appears, every later slot must also be zero.
+        let mut ended = false;
+        let mut sum: u32 = 0;
+        for &bps in slots.iter() {
+            if bps == 0 {
+                ended = true;
+            } else {
+                require!(!ended, crate::errors::BracketChainError::InvalidCustomPayout);
+                sum += bps as u32;
+            }
+        }
+        require!(
+            sum == crate::constants::BPS_DENOMINATOR as u32,
+            crate::errors::BracketChainError::InvalidCustomPayout
+        );
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod payout_tests {
+    use super::*;
+
+    fn custom(slots: [u16; 8]) -> PayoutPreset {
+        PayoutPreset::Custom(slots)
+    }
+
+    #[test]
+    fn valid_custom_splits_pass() {
+        // G6 split (50/30/20 → bps), and a full 8-deep split.
+        assert!(custom([5000, 3000, 2000, 0, 0, 0, 0, 0]).validate_custom().is_ok());
+        assert!(custom([2500, 2000, 1500, 1500, 1000, 800, 500, 200])
+            .validate_custom()
+            .is_ok());
+        assert!(custom([10000, 0, 0, 0, 0, 0, 0, 0]).validate_custom().is_ok());
+    }
+
+    #[test]
+    fn sum_not_10000_is_rejected() {
+        assert!(custom([5000, 3000, 1000, 0, 0, 0, 0, 0]).validate_custom().is_err());
+        assert!(custom([6000, 3000, 2000, 0, 0, 0, 0, 0]).validate_custom().is_err());
+    }
+
+    #[test]
+    fn gap_between_funded_slots_is_rejected() {
+        assert!(custom([5000, 0, 5000, 0, 0, 0, 0, 0]).validate_custom().is_err());
+    }
+
+    #[test]
+    fn unfunded_winner_is_rejected() {
+        assert!(custom([0, 6000, 4000, 0, 0, 0, 0, 0]).validate_custom().is_err());
+    }
+
+    #[test]
+    fn fixed_presets_skip_custom_validation() {
+        assert!(PayoutPreset::WinnerTakesAll.validate_custom().is_ok());
+        assert!(PayoutPreset::Standard.validate_custom().is_ok());
+        assert!(PayoutPreset::Deep.validate_custom().is_ok());
+    }
+
+    #[test]
+    fn placement_count_and_min_participants() {
+        let p = custom([5000, 3000, 2000, 0, 0, 0, 0, 0]);
+        assert_eq!(p.placement_count(), 3);
+        assert_eq!(p.min_participants(), 3);
+        // Fixed presets keep their declared minimums.
+        assert_eq!(PayoutPreset::WinnerTakesAll.min_participants(), 1);
+        assert_eq!(PayoutPreset::Deep.placement_count(), 7);
     }
 }
 

@@ -105,6 +105,10 @@ pub(crate) fn handler(
         max_participants <= MAX_PARTICIPANTS,
         BracketChainError::MaxParticipantsExceeded
     );
+    // Custom splits: bps sum to 10000, gapless, winner funded (D-1). No-op for
+    // the fixed presets. The count <= max check below covers `placement_count`
+    // via `min_participants()` (Custom returns its funded-slot count).
+    payout_preset.validate_custom()?;
     require!(
         payout_preset.min_participants() <= max_participants,
         BracketChainError::PresetExceedsParticipants
@@ -193,5 +197,6 @@ fn payout_preset_discriminator(preset: PayoutPreset) -> u8 {
         PayoutPreset::WinnerTakesAll => 0,
         PayoutPreset::Standard => 1,
         PayoutPreset::Deep => 2,
+        PayoutPreset::Custom(_) => 3,
     }
 }
