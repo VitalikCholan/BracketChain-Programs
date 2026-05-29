@@ -63,10 +63,12 @@ pub(crate) fn handler<'info>(
 ) -> Result<()> {
     let tournament_key = ctx.accounts.tournament.key();
 
-    // Terminal-only. (Stage E adds `PartialCancelled`; extend this set then.)
+    // Terminal-only.
     let status = ctx.accounts.tournament.status;
     require!(
-        status == TournamentStatus::Completed || status == TournamentStatus::Cancelled,
+        status == TournamentStatus::Completed
+            || status == TournamentStatus::Cancelled
+            || status == TournamentStatus::PartialCancelled,
         BracketChainError::TournamentInProgress
     );
 

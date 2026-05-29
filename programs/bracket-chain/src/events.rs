@@ -178,6 +178,16 @@ pub struct MatchFeedBound {
     pub switchboard_feed: Pubkey,
 }
 
+/// Mid-tournament cancellation (Stage E, E-2). The bracket is frozen; refunds
+/// are then processed permissionlessly by `partial_refund_chunk`.
+#[event]
+pub struct TournamentPartiallyCancelled {
+    pub event_version: u8,
+    pub tournament: Pubkey,
+    pub authority: Pubkey,
+    pub cancelled_at: i64,
+}
+
 /// Rent-reclaim progress for a terminal tournament (Stage D, D-3). Emitted on
 /// every `close_tournament` chunk; `root_closed` flips true on the final call
 /// that closes the vault + Tournament PDA itself.

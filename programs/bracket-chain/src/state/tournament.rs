@@ -10,6 +10,10 @@ pub enum TournamentStatus {
     Active,
     Completed,
     Cancelled,
+    /// Mid-tournament cancellation (Stage E). Distinct from `Cancelled`
+    /// (pre-start) for analytics/UI. Terminal — no reactivation. Disc = 5;
+    /// appended, never reorder (wire contract).
+    PartialCancelled,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, Debug, InitSpace)]

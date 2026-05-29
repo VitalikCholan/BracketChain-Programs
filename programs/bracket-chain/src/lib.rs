@@ -123,6 +123,24 @@ pub mod bracket_chain {
         instructions::close_tournament::handler(ctx, close_root)
     }
 
+    /// Organizer-signed mid-tournament cancellation (Stage E, E-2). Flips an
+    /// `Active` tournament to `PartialCancelled`; refunds run via
+    /// `partial_refund_chunk`.
+    pub fn partial_cancel_tournament(
+        ctx: Context<PartialCancelTournament>,
+    ) -> Result<()> {
+        instructions::partial_cancel_tournament::handler(ctx)
+    }
+
+    /// Permissionless full-refund processing for a partially-cancelled
+    /// tournament (Stage E, E-3). Refunds every participant their full entry
+    /// fee + returns the organizer deposit. Chunked via `remaining_accounts`.
+    pub fn partial_refund_chunk<'info>(
+        ctx: Context<'_, '_, '_, 'info, PartialRefundChunk<'info>>,
+    ) -> Result<()> {
+        instructions::partial_refund_chunk::handler(ctx)
+    }
+
     /// Devnet upgrade-only: grow a pre-V1 Tournament account to the V1 layout.
     /// Registration-phase tournaments only (see instruction docs).
     pub fn migrate_v1_tournament(ctx: Context<MigrateV1Tournament>) -> Result<()> {
