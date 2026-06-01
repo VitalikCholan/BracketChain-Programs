@@ -5,17 +5,23 @@ use crate::constants::{
     EVENT_VERSION_V1, MATCH_SEED, PARTICIPANT_SEED, TOURNAMENT_SEED, VAULT_SEED,
 };
 use crate::errors::BracketChainError;
-use crate::events::DisputeResolved;
+use crate::events::FinalSettled;
 use crate::instructions::settlement::{credit_match_stats, finalize_match};
-use crate::state::{MatchNode, Participant, ProtocolConfig, Tournament};
+use crate::state::{MatchNode, Participant, ProposalSource, ProtocolConfig, Tournament};
 
-/// The organizer (arbitrator) settles a disputed match, choosing the winner.
-/// May be called any time after a dispute is raised — it is the organizer's
-/// counterpart to the players' `force_claim_disputed` backstop.
+/// Accounts for `settle_final` — the **trusted-signer** finalize path for a
+/// multi-placement (non-`WinnerTakesAll`) final. Mirrors `PermissionlessFinalize`
+/// (`claim_result`) account-for-account, swapping the permissionless `payer` for
+/// the tournament's `arbitrator`. The arbitrator adjudicates placements 3..N
+/// among the semifinal losers; the **winner is still read from the match's
+/// trustless proposal** (`proposed_winner`) — the arbitrator cannot change it.
 #[derive(Accounts)]
-pub struct ResolveDispute<'info> {
-    #[account(address = tournament.organizer @ BracketChainError::UnauthorizedAuthority)]
-    pub organizer: Signer<'info>,
+pub struct SettleFinal<'info> {
+    /// The tournament's arbitrator (defaults to the organizer at create-time;
+    /// Squads-multisig reassignment is V1.3). The single point of trust — only
+    /// it may adjudicate the lower placements of a non-WTA final.
+    #[account(mut, address = tournament.arbitrator @ BracketChainError::UnauthorizedAuthority)]
+    pub arbitrator: Signer<'info>,
 
     #[account(
         mut,
@@ -41,13 +47,12 @@ pub struct ResolveDispute<'info> {
         constraint = match_account.tournament == tournament.key()
             @ BracketChainError::InvalidMatchIndex,
     )]
-    // Boxed: V1.2 grew MatchNode (+`commitment`/`switchboard_feed`), pushing
-    // this struct's `try_accounts` over the SBF 4KB stack frame. Heap-allocate
-    // the larger of the two MatchNodes; deref-coercion keeps the finalize_match
-    // call compatible. (`next_match` stays unboxed — `&mut Option<Box<_>>`
-    // would not coerce to the `&mut Option<Account>` parameter.)
+    // Boxed: V1.2 grew MatchNode, pushing `try_accounts` over the SBF 4KB stack
+    // frame. Deref-coercion keeps the finalize_match call compatible.
     pub match_account: Box<Account<'info, MatchNode>>,
 
+    /// Final-match only — pass `None`. `finalize_match` requires `next_match`
+    /// absent on the final and rejects a non-final that carries placements.
     #[account(mut)]
     pub next_match: Option<Account<'info, MatchNode>>,
 
@@ -83,25 +88,42 @@ pub struct ResolveDispute<'info> {
     pub token_program: Program<'info, Token>,
 }
 
+/// Arbitrator-signed settlement of a non-WTA final (H-1 fix). Preconditions
+/// mirror `claim_result` exactly — an **undisputed** proposal whose dispute
+/// window has elapsed — so the winner is the same trustless `proposed_winner`
+/// the players/oracle established; only the lower placements are the
+/// arbitrator's call. Disputed finals route through `resolve_dispute` (where the
+/// arbitrator legitimately picks the winner); `WinnerTakesAll` finals stay
+/// permissionlessly claimable via `claim_result`. This is the trusted sibling of
+/// `claim_result`, not a winner-overriding admin path (§4 / decision-2a).
 pub(crate) fn handler<'info>(
-    mut ctx: Context<'_, '_, '_, 'info, ResolveDispute<'info>>,
-    winner: Pubkey,
+    mut ctx: Context<'_, '_, '_, 'info, SettleFinal<'info>>,
     placements: Vec<Pubkey>,
 ) -> Result<()> {
-    let arbitrator = ctx.accounts.organizer.key();
+    let arbitrator = ctx.accounts.arbitrator.key();
     let accs = &mut ctx.accounts;
+    let now = Clock::get()?.unix_timestamp;
 
-    require!(accs.match_account.disputed, BracketChainError::ProposalNotDisputed);
+    require!(
+        accs.match_account.proposal_source != ProposalSource::None,
+        BracketChainError::NoProposal
+    );
+    require!(!accs.match_account.disputed, BracketChainError::ProposalDisputed);
+    require!(
+        now >= accs.match_account.claim_deadline,
+        BracketChainError::ClaimWindowNotElapsed
+    );
 
+    // Winner is pinned to the proposal — the arbitrator only adjudicates
+    // placements, never the result.
+    let winner = accs.match_account.proposed_winner;
     let (tournament_key, bracket, round, match_index) = (
         accs.match_account.tournament,
         accs.match_account.bracket,
         accs.match_account.round,
         accs.match_account.match_index,
     );
-    let now = Clock::get()?.unix_timestamp;
 
-    // `finalize_match` enforces winner ∈ {player_a, player_b}.
     finalize_match(
         &mut accs.tournament,
         &mut accs.match_account,
@@ -113,13 +135,13 @@ pub(crate) fn handler<'info>(
         ctx.remaining_accounts,
         winner,
         &placements,
-        true, // organizer/arbitrator-signed — trusted to adjudicate placements (H-1)
+        true, // arbitrator-signed — trusted to adjudicate placements (H-1)
         now,
     )?;
 
     credit_match_stats(&mut accs.participant_a, &mut accs.participant_b, winner)?;
 
-    emit!(DisputeResolved {
+    emit!(FinalSettled {
         event_version: EVENT_VERSION_V1,
         tournament: tournament_key,
         bracket,
@@ -127,7 +149,7 @@ pub(crate) fn handler<'info>(
         match_index,
         arbitrator,
         winner,
-        resolved_at: now,
+        settled_at: now,
     });
 
     Ok(())

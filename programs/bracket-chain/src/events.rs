@@ -200,3 +200,20 @@ pub struct TournamentClosed {
     /// True once the vault + Tournament PDA have been closed (terminal call).
     pub root_closed: bool,
 }
+
+/// Arbitrator-adjudicated settlement of a non-`WinnerTakesAll` final (H-1 fix,
+/// `settle_final`). The winner is pinned to the match's trustless proposal; only
+/// placements 3..N are the arbitrator's call. Distinct from `ResultClaimed` so
+/// the indexer can surface "settled by arbitrator" vs a permissionless claim.
+/// `MatchReported` + `TournamentCompleted` still fire from `finalize_match`.
+#[event]
+pub struct FinalSettled {
+    pub event_version: u8,
+    pub tournament: Pubkey,
+    pub bracket: u8,
+    pub round: u8,
+    pub match_index: u16,
+    pub arbitrator: Pubkey,
+    pub winner: Pubkey,
+    pub settled_at: i64,
+}

@@ -21,6 +21,7 @@ pub mod resolve_dispute;
 pub mod reveal_seed;
 pub mod set_oracle_config;
 pub mod set_sas_config;
+pub mod settle_final;
 pub mod settlement;
 pub mod start_tournament;
 
@@ -46,6 +47,7 @@ pub use resolve_dispute::*;
 pub use reveal_seed::*;
 pub use set_oracle_config::*;
 pub use set_sas_config::*;
+pub use settle_final::*;
 pub use start_tournament::*;
 // `settlement` exposes free helpers, not an instruction — referenced by path.
 // `force_claim_disputed` reuses `PermissionlessFinalize` (no struct to export).

@@ -38,6 +38,11 @@ pub fn finalize_match<'info>(
     remaining_accounts: &[AccountInfo<'info>],
     winner: Pubkey,
     placements: &[Pubkey],
+    // H-1: `true` only for trusted-signer paths (organizer `report_result`,
+    // arbitrator `resolve_dispute` / `settle_final`). Permissionless and
+    // counterparty paths pass `false` and may only finalize WinnerTakesAll
+    // finals (where placements carry no organizer-trusted slots).
+    placements_trusted: bool,
     now: i64,
 ) -> Result<()> {
     require!(
@@ -84,6 +89,18 @@ pub fn finalize_match<'info>(
     let is_final = match_round + 1 == max_round && match_idx == 0;
 
     if is_final {
+        // H-1: single-elim has no 3rd-place match, so `placements[2..]` are
+        // unconstrained on-chain (only `placements[0]`/`[1]` are validated in
+        // `distribute_prizes`). Multi-placement presets (Standard/Deep/Custom)
+        // therefore require a trusted signer to adjudicate the lower placements;
+        // permissionless / counterparty callers are limited to WinnerTakesAll
+        // (`placement_count == 1`). This lifts decision-2a from an off-chain
+        // cron convention into an on-chain invariant.
+        require!(
+            placements_trusted || tournament.payout_preset.placement_count() <= 1,
+            BracketChainError::UntrustedMultiPlacementFinal
+        );
+
         require!(
             next_match.is_none(),
             BracketChainError::InvalidMatchIndex

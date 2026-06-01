@@ -172,4 +172,8 @@ pub enum BracketChainError {
     // ── Stage D (program improvements; appended — never reorder above) ───────
     #[msg("Custom payout split is invalid (bps must sum to 10000, be gapless, and fund the winner)")]
     InvalidCustomPayout,
+
+    // ── H-1 hardening (appended — never reorder above) ──────────────────────
+    #[msg("A multi-placement (non-WinnerTakesAll) final may only be finalized by a trusted signer (settle_final / report_result / resolve_dispute), not a permissionless or counterparty path")]
+    UntrustedMultiPlacementFinal,
 }

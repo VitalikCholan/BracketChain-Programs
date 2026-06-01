@@ -120,6 +120,7 @@ pub(crate) fn handler<'info>(
         ctx.remaining_accounts,
         winner,
         &placements,
+        false, // permissionless — WinnerTakesAll finals only (H-1)
         now,
     )?;
 

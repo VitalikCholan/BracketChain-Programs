@@ -126,6 +126,7 @@ pub(crate) fn handler<'info>(
         ctx.remaining_accounts,
         winner,
         &placements,
+        true, // organizer-signed (OrganizerOnly) — trusted to adjudicate placements (H-1)
         now,
     )?;
 

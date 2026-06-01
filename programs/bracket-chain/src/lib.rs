@@ -219,4 +219,18 @@ pub mod bracket_chain {
     ) -> Result<()> {
         instructions::force_claim_disputed::handler(ctx, placements)
     }
+
+    /// Arbitrator-signed settlement of a **non-WinnerTakesAll final** (H-1 fix).
+    /// The winner is pinned to the match's existing trustless proposal
+    /// (`proposed_winner`); the arbitrator only adjudicates placements 3..N among
+    /// the semifinal losers — exactly the decision-2a trust boundary, now an
+    /// on-chain invariant. Preconditions mirror `claim_result` (undisputed
+    /// proposal, dispute window elapsed). Disputed finals use `resolve_dispute`;
+    /// WinnerTakesAll finals stay permissionlessly claimable via `claim_result`.
+    pub fn settle_final<'info>(
+        ctx: Context<'_, '_, '_, 'info, SettleFinal<'info>>,
+        placements: Vec<Pubkey>,
+    ) -> Result<()> {
+        instructions::settle_final::handler(ctx, placements)
+    }
 }
