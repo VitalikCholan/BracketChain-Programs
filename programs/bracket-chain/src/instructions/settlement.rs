@@ -326,16 +326,18 @@ fn distribute_prizes<'info>(
         &bump_slice,
     ]];
 
+    // Champion (place 1) absorbs the floor-division remainder so the amounts
+    // sum to exactly `net_pool` and the vault drains to zero — otherwise the
+    // few-base-unit dust would block `close_tournament`'s `vault.amount == 0`
+    // root-close guard forever for any non-WinnerTakesAll preset (Medium-1).
+    // Refund paths (cancel / partial) are exact and unaffected. Pure split is
+    // unit-tested in `split_tests` below.
+    let amounts = split_placements(net_pool, &bps_table, placement_count)?;
+
     let mut placement_payouts: Vec<PlacementPayout> = Vec::with_capacity(placement_count);
 
     for i in 0..placement_count {
-        let bps = bps_table[i];
-        let amount = (net_pool as u128)
-            .checked_mul(bps as u128)
-            .ok_or(BracketChainError::ArithmeticOverflow)?
-            .checked_div(BPS_DENOMINATOR as u128)
-            .ok_or(BracketChainError::ArithmeticOverflow)? as u64;
-
+        let amount = amounts[i];
         if amount == 0 {
             continue;
         }
@@ -404,4 +406,88 @@ fn validate_token_account(
     require_keys_eq!(mint, *expected_mint, BracketChainError::InvalidTokenMint);
     require_keys_eq!(owner, *expected_owner, BracketChainError::InvalidTreasury);
     Ok(())
+}
+
+/// Splits `net_pool` across the first `placement_count` slots of `bps_table`,
+/// flooring each and giving the champion (slot 0) the remainder so the result
+/// sums to **exactly** `net_pool`. Pure (no accounts / CPI) for unit-testing;
+/// keeps the vault dust-free so `close_tournament` can close it (Medium-1).
+fn split_placements(net_pool: u64, bps_table: &[u16], placement_count: usize) -> Result<Vec<u64>> {
+    let mut amounts: Vec<u64> = Vec::with_capacity(placement_count);
+    for &bps in bps_table.iter().take(placement_count) {
+        let amount = (net_pool as u128)
+            .checked_mul(bps as u128)
+            .ok_or(BracketChainError::ArithmeticOverflow)?
+            .checked_div(BPS_DENOMINATOR as u128)
+            .ok_or(BracketChainError::ArithmeticOverflow)? as u64;
+        amounts.push(amount);
+    }
+    if placement_count > 0 {
+        let mut lower_sum: u64 = 0;
+        for &a in amounts.iter().skip(1) {
+            lower_sum = lower_sum
+                .checked_add(a)
+                .ok_or(BracketChainError::ArithmeticOverflow)?;
+        }
+        // Lower floors sum to ≤ net_pool (bps sum to ≤ 10_000), so the champion
+        // share stays ≥ its own floored amount.
+        amounts[0] = net_pool
+            .checked_sub(lower_sum)
+            .ok_or(BracketChainError::ArithmeticOverflow)?;
+    }
+    Ok(amounts)
+}
+
+#[cfg(test)]
+mod split_tests {
+    use super::split_placements;
+    use crate::constants::{PAYOUT_DEEP, PAYOUT_STANDARD, PAYOUT_WTA};
+
+    // The Medium-1 invariant: a full distribution leaves zero dust in the vault.
+    fn assert_sums_to_net(net: u64, bps: &[u16], count: usize) -> Vec<u64> {
+        let a = split_placements(net, bps, count).unwrap();
+        assert_eq!(a.iter().sum::<u64>(), net, "amounts must sum to the net pool");
+        a
+    }
+
+    #[test]
+    fn wta_is_exact_and_unchanged() {
+        assert_eq!(assert_sums_to_net(1_234_567, &PAYOUT_WTA, 1), vec![1_234_567]);
+    }
+
+    #[test]
+    fn standard_dusty_net_goes_entirely_to_champion() {
+        // net = 101 → floors 60/25/15 = 100; champion absorbs the 1-unit dust.
+        assert_eq!(assert_sums_to_net(101, &PAYOUT_STANDARD, 3), vec![61, 25, 15]);
+    }
+
+    #[test]
+    fn standard_clean_net_matches_plain_floor() {
+        // net divisible → champion share equals the plain floor (no change vs
+        // the pre-fix code on clean pools — keeps existing payout tests valid).
+        assert_eq!(
+            assert_sums_to_net(3_860_000, &PAYOUT_STANDARD, 3),
+            vec![2_316_000, 965_000, 579_000]
+        );
+    }
+
+    #[test]
+    fn custom_indivisible_bps_leaves_no_dust() {
+        // Custom [3334,3333,3333] with an awkward net: plain floors lose 2
+        // units; the champion absorbs them so the vault drains to zero.
+        let bps = [3334u16, 3333, 3333, 0, 0, 0, 0, 0];
+        let a = assert_sums_to_net(1_286_666, &bps, 3);
+        assert_eq!(a, vec![428_976, 428_845, 428_845]);
+        assert!(a[0] >= 428_974, "champion never receives less than its floor");
+    }
+
+    #[test]
+    fn deep_clean_net_is_exact() {
+        assert_sums_to_net(123_520_000, &PAYOUT_DEEP, 7);
+    }
+
+    #[test]
+    fn tiny_net_all_remainder_to_champion() {
+        assert_eq!(assert_sums_to_net(2, &PAYOUT_STANDARD, 3), vec![2, 0, 0]);
+    }
 }

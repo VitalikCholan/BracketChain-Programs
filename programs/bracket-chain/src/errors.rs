@@ -176,4 +176,11 @@ pub enum BracketChainError {
     // ── H-1 hardening (appended — never reorder above) ──────────────────────
     #[msg("A multi-placement (non-WinnerTakesAll) final may only be finalized by a trusted signer (settle_final / report_result / resolve_dispute), not a permissionless or counterparty path")]
     UntrustedMultiPlacementFinal,
+
+    // ── H-2 hardening (appended — never reorder above) ──────────────────────
+    #[msg("Bracket descriptor is inconsistent with the VRF-derived seed permutation")]
+    BracketSeedMismatch,
+
+    #[msg("Account supplied for a bracket slot is not a Participant of this tournament")]
+    NonParticipantInBracket,
 }

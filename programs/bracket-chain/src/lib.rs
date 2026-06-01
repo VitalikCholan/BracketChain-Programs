@@ -4,6 +4,7 @@ pub mod constants;
 pub mod errors;
 pub mod events;
 pub mod instructions;
+pub mod seeding;
 pub mod state;
 
 use instructions::*;

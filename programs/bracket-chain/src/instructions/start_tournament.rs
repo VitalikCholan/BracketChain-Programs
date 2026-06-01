@@ -5,7 +5,10 @@ use anchor_lang::system_program;
 use crate::constants::{EVENT_VERSION_V1, MATCH_SEED, MIN_PARTICIPANTS};
 use crate::errors::BracketChainError;
 use crate::events::TournamentStarted;
-use crate::state::{MatchNode, MatchStatus, Tournament, TournamentStatus};
+use crate::seeding::{round0_expected, seed_permutation};
+use crate::state::{
+    MatchNode, MatchStatus, Participant, SettlementMode, Tournament, TournamentStatus,
+};
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
 pub struct MatchInitDescriptor {
@@ -48,8 +51,13 @@ pub(crate) fn handler<'info>(
     ctx: Context<'_, '_, '_, 'info, StartTournament<'info>>,
     descriptors: Vec<MatchInitDescriptor>,
 ) -> Result<()> {
+    // Layout: the first `descriptors.len()` remaining accounts are the MatchNode
+    // PDAs to create (1:1 with descriptors). For VRF-seeded (non-OrganizerOnly)
+    // tournaments, the tail carries the `Participant` accounts proving each
+    // placed player matches the seed-derived permutation — consumed by a cursor
+    // in the loop below (H-2). OrganizerOnly passes no tail.
     require!(
-        descriptors.len() == ctx.remaining_accounts.len(),
+        ctx.remaining_accounts.len() >= descriptors.len(),
         BracketChainError::RemainingAccountsMismatch
     );
 
@@ -73,6 +81,15 @@ pub(crate) fn handler<'info>(
                 BracketChainError::SeedNotRevealed
             );
         } else {
+            // H-2c: non-OrganizerOnly tournaments MUST be VRF-seeded. The
+            // validator-influenceable SlotHashes fallback is only acceptable for
+            // trust-mode (OrganizerOnly) brackets, where the organizer is
+            // already the result authority — there, seeding manipulation buys
+            // nothing it couldn't already do.
+            require!(
+                ctx.accounts.tournament.settlement_mode == SettlementMode::OrganizerOnly,
+                BracketChainError::SeedNotRevealed
+            );
             let data = ctx.accounts.slot_hashes.try_borrow_data()?;
             require!(data.len() >= 48, BracketChainError::SlotHashesUnavailable);
             let mut seed = [0u8; 32];
@@ -107,9 +124,23 @@ pub(crate) fn handler<'info>(
     let space = 8 + MatchNode::INIT_SPACE;
     let lamports = Rent::get()?.minimum_balance(space);
 
+    // H-2: non-OrganizerOnly tournaments must match the seed-derived permutation.
+    // Re-derive it (cheap, deterministic) and validate each placed player against
+    // it, consuming Participant accounts from the remaining-accounts tail.
+    let vrf_mode = ctx.accounts.tournament.settlement_mode != SettlementMode::OrganizerOnly;
+    let participant_count = ctx.accounts.tournament.participant_count;
+    let perm: Vec<u16> = if vrf_mode {
+        seed_permutation(&ctx.accounts.tournament.seed_hash, participant_count)
+    } else {
+        Vec::new()
+    };
+    let match_pdas = &ctx.remaining_accounts[..descriptors.len()];
+    let participant_tail = &ctx.remaining_accounts[descriptors.len()..];
+    let mut p_cursor: usize = 0;
+
     let mut byes_initialized: u16 = 0;
 
-    for (descriptor, match_account) in descriptors.iter().zip(ctx.remaining_accounts.iter()) {
+    for (descriptor, match_account) in descriptors.iter().zip(match_pdas.iter()) {
         require!(
             descriptor.round < max_round,
             BracketChainError::InvalidMatchIndex
@@ -119,6 +150,21 @@ pub(crate) fn handler<'info>(
             descriptor.match_index < matches_in_round,
             BracketChainError::InvalidMatchIndex
         );
+
+        // Seed-consistency + membership (non-OrganizerOnly only). Consumes the
+        // Participant accounts that prove `player == perm[rank]`.
+        if vrf_mode {
+            validate_descriptor_against_seed(
+                descriptor,
+                &perm,
+                bracket_size,
+                participant_count,
+                tournament_key,
+                ctx.program_id,
+                participant_tail,
+                &mut p_cursor,
+            )?;
+        }
 
         let bracket_arr = [descriptor.bracket];
         let round_arr = [descriptor.round];
@@ -211,6 +257,15 @@ pub(crate) fn handler<'info>(
         }
     }
 
+    // Every supplied Participant account must have been consumed — guards
+    // against padding the tail with extra/unrelated accounts.
+    if vrf_mode {
+        require!(
+            p_cursor == participant_tail.len(),
+            BracketChainError::RemainingAccountsMismatch
+        );
+    }
+
     let descriptor_count = descriptors.len() as u16;
     let tournament = &mut ctx.accounts.tournament;
     tournament.matches_initialized = tournament
@@ -236,5 +291,167 @@ pub(crate) fn handler<'info>(
         });
     }
 
+    Ok(())
+}
+
+// ── H-2: seed-consistency + membership validation ───────────────────────────
+//
+// Validates one descriptor against the VRF-derived permutation `perm`, consuming
+// the Participant accounts that prove the placed players are the seed-mandated
+// ones. Round 0 carries both players (or a canonical bye); round 1 carries only
+// the bye-propagated winners; round ≥ 2 must be empty (filled by `advance_winner`).
+#[allow(clippy::too_many_arguments)]
+fn validate_descriptor_against_seed<'info>(
+    descriptor: &MatchInitDescriptor,
+    perm: &[u16],
+    bracket_size: u16,
+    n: u16,
+    tournament_key: Pubkey,
+    program_id: &Pubkey,
+    participant_tail: &[AccountInfo<'info>],
+    cursor: &mut usize,
+) -> Result<()> {
+    let default = Pubkey::default();
+
+    if descriptor.round == 0 {
+        let (exp_a, exp_b) = round0_expected(perm, descriptor.match_index, bracket_size, n);
+        // player_a (seed-rank == match_index) is always a real participant.
+        consume_and_check(
+            participant_tail,
+            cursor,
+            program_id,
+            tournament_key,
+            descriptor.player_a,
+            exp_a,
+        )?;
+        match exp_b {
+            Some(exp_b) => {
+                require!(!descriptor.bye, BracketChainError::BracketSeedMismatch);
+                require!(descriptor.player_b != default, BracketChainError::BracketSeedMismatch);
+                consume_and_check(
+                    participant_tail,
+                    cursor,
+                    program_id,
+                    tournament_key,
+                    descriptor.player_b,
+                    exp_b,
+                )?;
+            }
+            None => {
+                // Canonical bye: the top seed advances alone.
+                require!(descriptor.bye, BracketChainError::BracketSeedMismatch);
+                require!(descriptor.player_b == default, BracketChainError::BracketSeedMismatch);
+            }
+        }
+        return Ok(());
+    }
+
+    // Byes only originate in round 0; higher rounds are never byes.
+    require!(!descriptor.bye, BracketChainError::BracketSeedMismatch);
+
+    if descriptor.round == 1 {
+        // Each slot is either fed by a round-0 bye (pre-filled with the bye
+        // winner) or by a real match (default, filled later by advance_winner).
+        let parent_a = (descriptor.match_index as usize) * 2;
+        let parent_b = parent_a + 1;
+        validate_round1_slot(
+            descriptor.player_a,
+            parent_a as u16,
+            perm,
+            bracket_size,
+            n,
+            participant_tail,
+            cursor,
+            program_id,
+            tournament_key,
+        )?;
+        validate_round1_slot(
+            descriptor.player_b,
+            parent_b as u16,
+            perm,
+            bracket_size,
+            n,
+            participant_tail,
+            cursor,
+            program_id,
+            tournament_key,
+        )?;
+    } else {
+        // Round ≥ 2: no byes reach here; both slots fill via advance_winner.
+        require!(descriptor.player_a == default, BracketChainError::BracketSeedMismatch);
+        require!(descriptor.player_b == default, BracketChainError::BracketSeedMismatch);
+    }
+
+    Ok(())
+}
+
+/// Validates a round-1 slot: if its round-0 parent (`parent_match`) is a bye, the
+/// slot must be pre-filled with that bye's winner (seed-rank `parent_match`);
+/// otherwise the slot must be empty (the real parent's winner advances later).
+#[allow(clippy::too_many_arguments)]
+fn validate_round1_slot<'info>(
+    slot_player: Pubkey,
+    parent_match: u16,
+    perm: &[u16],
+    bracket_size: u16,
+    n: u16,
+    participant_tail: &[AccountInfo<'info>],
+    cursor: &mut usize,
+    program_id: &Pubkey,
+    tournament_key: Pubkey,
+) -> Result<()> {
+    let (parent_winner_seed, parent_opponent) = round0_expected(perm, parent_match, bracket_size, n);
+    if parent_opponent.is_none() {
+        // Parent was a bye → its winner pre-fills this slot.
+        require!(slot_player != Pubkey::default(), BracketChainError::BracketSeedMismatch);
+        consume_and_check(
+            participant_tail,
+            cursor,
+            program_id,
+            tournament_key,
+            slot_player,
+            parent_winner_seed,
+        )?;
+    } else {
+        require!(slot_player == Pubkey::default(), BracketChainError::BracketSeedMismatch);
+    }
+    Ok(())
+}
+
+/// Consumes the next Participant account from the tail and asserts it is a
+/// genuine `Participant` of this tournament whose wallet == `expected_wallet`
+/// and whose `seed_index == expected_seed_index` (the seed-mandated placement).
+fn consume_and_check<'info>(
+    tail: &[AccountInfo<'info>],
+    cursor: &mut usize,
+    program_id: &Pubkey,
+    tournament_key: Pubkey,
+    expected_wallet: Pubkey,
+    expected_seed_index: u16,
+) -> Result<()> {
+    require!(*cursor < tail.len(), BracketChainError::RemainingAccountsMismatch);
+    let ai = &tail[*cursor];
+    *cursor += 1;
+
+    require_keys_eq!(*ai.owner, *program_id, BracketChainError::NonParticipantInBracket);
+    let participant: Participant = {
+        let data = ai.try_borrow_data()?;
+        Participant::try_deserialize(&mut &data[..])?
+    };
+    require_keys_eq!(
+        participant.tournament,
+        tournament_key,
+        BracketChainError::NonParticipantInBracket
+    );
+    require_keys_eq!(
+        participant.wallet,
+        expected_wallet,
+        BracketChainError::NonParticipantInBracket
+    );
+    require_eq!(
+        participant.seed_index,
+        expected_seed_index,
+        BracketChainError::BracketSeedMismatch
+    );
     Ok(())
 }
