@@ -55,3 +55,15 @@ pub const MAX_PAYOUT_SLOTS: usize = 8;
 pub const PAYOUT_WTA: [u16; MAX_PAYOUT_SLOTS] = [10_000, 0, 0, 0, 0, 0, 0, 0];
 pub const PAYOUT_STANDARD: [u16; MAX_PAYOUT_SLOTS] = [6_000, 2_500, 1_500, 0, 0, 0, 0, 0];
 pub const PAYOUT_DEEP: [u16; MAX_PAYOUT_SLOTS] = [4_000, 2_500, 1_500, 1_000, 500, 300, 200, 0];
+
+/// Bounds for `set_oracle_config` (L-2 hardening). `min_oracle_samples` must be
+/// at least this — `min_oracle_samples = 0` would let
+/// `PullFeedAccountData::get_value` settle on a *single* submission (its
+/// `submissions.len() < 0` guard never trips), silently degrading the oracle
+/// trust threshold to one sample.
+pub const MIN_ORACLE_SAMPLES_FLOOR: u32 = 1;
+/// Ceiling on `max_stale_slots`: the oldest an oracle sample may be and still
+/// feed a settlement. ~9000 slots ≈ 1 hour at ~2.5 slots/s — generous for any
+/// real feed cadence while preventing an admin from accepting arbitrarily stale
+/// data (and keeping `clock_slot - max_staleness` well clear of underflow).
+pub const MAX_ORACLE_STALE_SLOTS_CEILING: u32 = 9_000;

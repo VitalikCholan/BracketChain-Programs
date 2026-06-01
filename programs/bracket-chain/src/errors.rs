@@ -183,4 +183,8 @@ pub enum BracketChainError {
 
     #[msg("Account supplied for a bracket slot is not a Participant of this tournament")]
     NonParticipantInBracket,
+
+    // ── L-2 hardening (appended — never reorder above) ──────────────────────
+    #[msg("Oracle config out of bounds (min_oracle_samples must be >= 1; max_stale_slots must not exceed the staleness ceiling)")]
+    InvalidOracleConfig,
 }
