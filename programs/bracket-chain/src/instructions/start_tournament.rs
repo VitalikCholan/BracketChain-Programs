@@ -1,6 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_lang::solana_program::sysvar::slot_hashes;
 use anchor_lang::system_program;
+use solana_keccak_hasher as keccak;
 
 use crate::constants::{EVENT_VERSION_V1, MATCH_SEED, MIN_PARTICIPANTS};
 use crate::errors::BracketChainError;
@@ -92,8 +93,38 @@ pub(crate) fn handler<'info>(
             );
             let data = ctx.accounts.slot_hashes.try_borrow_data()?;
             require!(data.len() >= 48, BracketChainError::SlotHashesUnavailable);
-            let mut seed = [0u8; 32];
-            seed.copy_from_slice(&data[16..48]);
+            // L-1 hardening. The raw most-recent slot hash is influenceable by
+            // (and predictable to) the block leader producing this slot. Instead
+            // of copying it verbatim, derive the seed by hashing several recent
+            // SlotHashes entries together — no single leader controls the older
+            // ones — bound to a domain tag and the tournament identity so the
+            // fallback seed is unique per tournament even within one slot.
+            //
+            // SlotHashes layout: [u64 len][ (u64 slot, [u8;32] hash) ; len ],
+            // most-recent entry first; header + one 40-byte entry = 48 bytes.
+            const SEED_DOMAIN: &[u8] = b"bracketchain:seed:slot-hash:v1";
+            const ENTRY_LEN: usize = 40;
+            const MAX_MIX_ENTRIES: usize = 8;
+            let entry_count = u64::from_le_bytes(
+                data[0..8]
+                    .try_into()
+                    .map_err(|_| error!(BracketChainError::SlotHashesUnavailable))?,
+            ) as usize;
+            let mut hasher = keccak::Hasher::default();
+            hasher.hash(SEED_DOMAIN);
+            hasher.hash(tournament_key.as_ref());
+            hasher.hash(ctx.accounts.tournament.organizer.as_ref());
+            hasher.hash(&ctx.accounts.tournament.participant_count.to_le_bytes());
+            // Mix at least one and up to MAX_MIX_ENTRIES recent slot entries
+            // (slot number + hash), guarding against a truncated sysvar tail.
+            for i in 0..entry_count.min(MAX_MIX_ENTRIES).max(1) {
+                let off = 8 + i * ENTRY_LEN;
+                if off + ENTRY_LEN > data.len() {
+                    break;
+                }
+                hasher.hash(&data[off..off + ENTRY_LEN]);
+            }
+            let seed = hasher.result().to_bytes();
             drop(data);
             ctx.accounts.tournament.seed_hash = seed;
         }

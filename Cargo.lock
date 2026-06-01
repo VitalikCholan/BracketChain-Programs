@@ -482,6 +482,7 @@ dependencies = [
  "anchor-lang",
  "anchor-spl",
  "bytemuck",
+ "solana-keccak-hasher",
  "switchboard-on-demand",
 ]
 
