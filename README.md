@@ -77,6 +77,7 @@ Registration ─► PendingBracketInit ─► Active ─► Completed
 | 15 | `claim_result` | Permissionless: finalizes an undisputed proposal past its deadline. Emits `ResultClaimed` + `MatchReported`. |
 | 16 | `resolve_dispute` | Organizer/arbitrator overrides the winner on a disputed match. Emits `DisputeResolved` + `MatchReported`. |
 | 17 | `force_claim_disputed` | Permissionless backstop: finalizes a disputed match for the proposed winner after 24h of organizer silence. |
+| 17a | `settle_final` | Arbitrator-signed finalize for non-`WinnerTakesAll` finals: winner is pinned to the trustless proposal; arbitrator adjudicates placements 3..N among semifinal losers. Emits `FinalSettled` + `MatchReported` + `TournamentCompleted`. |
 
 **Oracle settlement (Switchboard On-Demand):**
 
