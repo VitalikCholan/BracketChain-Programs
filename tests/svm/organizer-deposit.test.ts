@@ -35,9 +35,11 @@ import { BracketChain } from "../../target/types/bracket_chain";
 //      fails with InvalidVault — the program requires the SDK to pass it.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const PROGRAM_ID = new PublicKey("3YpkUKBh8288XN2dCKSwBnEdyc5UozSJ19A1ZCLpUZsZ");
+const PROGRAM_ID = new PublicKey(
+  "3YpkUKBh8288XN2dCKSwBnEdyc5UozSJ19A1ZCLpUZsZ"
+);
 const TOKEN_PROGRAM = new PublicKey(
-  "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+  "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
 );
 
 const ENTRY_FEE = 1_000_000n; // 1 USDC
@@ -52,33 +54,52 @@ const program = new Program<BracketChain>(idl as any, stubProvider);
 const coder = program.coder;
 
 // ── PDAs ──────────────────────────────────────────────────────────────────────
-function tournamentPda(organizer: PublicKey, name: string): [PublicKey, number] {
+function tournamentPda(
+  organizer: PublicKey,
+  name: string
+): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
     [Buffer.from("tournament"), organizer.toBuffer(), Buffer.from(name)],
-    PROGRAM_ID,
+    PROGRAM_ID
   );
 }
 function vaultPda(tournament: PublicKey): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
     [Buffer.from("vault"), tournament.toBuffer()],
-    PROGRAM_ID,
+    PROGRAM_ID
   );
 }
-function participantPda(tournament: PublicKey, wallet: PublicKey): [PublicKey, number] {
+function participantPda(
+  tournament: PublicKey,
+  wallet: PublicKey
+): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
     [Buffer.from("participant"), tournament.toBuffer(), wallet.toBuffer()],
-    PROGRAM_ID,
+    PROGRAM_ID
   );
 }
 function protocolConfigPda(): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync([Buffer.from("protocol_config")], PROGRAM_ID);
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from("protocol_config")],
+    PROGRAM_ID
+  );
 }
-function matchPda(tournament: PublicKey, round: number, idx: number): [PublicKey, number] {
+function matchPda(
+  tournament: PublicKey,
+  round: number,
+  idx: number
+): [PublicKey, number] {
   const idxLe = Buffer.alloc(2);
   idxLe.writeUInt16LE(idx, 0);
   return PublicKey.findProgramAddressSync(
-    [Buffer.from("match"), tournament.toBuffer(), Buffer.from([0]), Buffer.from([round]), idxLe],
-    PROGRAM_ID,
+    [
+      Buffer.from("match"),
+      tournament.toBuffer(),
+      Buffer.from([0]),
+      Buffer.from([round]),
+      idxLe,
+    ],
+    PROGRAM_ID
   );
 }
 
@@ -132,7 +153,11 @@ function makeTournament(o: {
   };
 }
 
-function makeParticipant(o: { tournament: PublicKey; wallet: PublicKey; bump: number }) {
+function makeParticipant(o: {
+  tournament: PublicKey;
+  wallet: PublicKey;
+  bump: number;
+}) {
   return {
     tournament: o.tournament,
     wallet: o.wallet,
@@ -179,7 +204,11 @@ function makeMatch(o: {
   };
 }
 
-function makeProtocolConfig(o: { authority: PublicKey; treasury: PublicKey; bump: number }) {
+function makeProtocolConfig(o: {
+  authority: PublicKey;
+  treasury: PublicKey;
+  bump: number;
+}) {
   return {
     authority: o.authority,
     treasury: o.treasury,
@@ -200,7 +229,7 @@ function bootSvm(): LiteSvm {
   svm.setSysvars();
   svm.addProgramFromFile(
     PROGRAM_ID.toBytes(),
-    path.join(__dirname, "..", "..", "target", "deploy", "bracket_chain.so"),
+    path.join(__dirname, "..", "..", "target", "deploy", "bracket_chain.so")
   );
   return svm;
 }
@@ -208,31 +237,54 @@ async function writeAccount(
   svm: LiteSvm,
   pubkey: PublicKey,
   name: "tournament" | "participant" | "matchNode" | "protocolConfig",
-  obj: any,
+  obj: any
 ) {
   const data = await coder.accounts.encode(name, obj);
   const lamports = svm.minimumBalanceForRentExemption(BigInt(data.length));
-  svm.setAccount(pubkey.toBytes(), new LiteAccount(lamports, data, PROGRAM_ID.toBytes(), false, 0n));
+  svm.setAccount(
+    pubkey.toBytes(),
+    new LiteAccount(lamports, data, PROGRAM_ID.toBytes(), false, 0n)
+  );
 }
-function writeTokenAccount(svm: LiteSvm, pubkey: PublicKey, owner: PublicKey, amount: bigint) {
+function writeTokenAccount(
+  svm: LiteSvm,
+  pubkey: PublicKey,
+  owner: PublicKey,
+  amount: bigint
+) {
   const buf = Buffer.alloc(165);
   MINT.toBuffer().copy(buf, 0);
   owner.toBuffer().copy(buf, 32);
   buf.writeBigUInt64LE(amount, 64);
   buf.writeUInt8(1, 108); // state = Initialized
   const lamports = svm.minimumBalanceForRentExemption(165n);
-  svm.setAccount(pubkey.toBytes(), new LiteAccount(lamports, buf, TOKEN_PROGRAM.toBytes(), false, 0n));
+  svm.setAccount(
+    pubkey.toBytes(),
+    new LiteAccount(lamports, buf, TOKEN_PROGRAM.toBytes(), false, 0n)
+  );
 }
 function tokenAmount(svm: LiteSvm, pubkey: PublicKey): bigint {
   const acc = svm.getAccount(pubkey.toBytes());
   if (!acc) return 0n;
   return Buffer.from(acc.data()).readBigUInt64LE(64);
 }
-function meta(pubkey: PublicKey, isSigner: boolean, isWritable: boolean): AccountMeta {
+function meta(
+  pubkey: PublicKey,
+  isSigner: boolean,
+  isWritable: boolean
+): AccountMeta {
   return { pubkey, isSigner, isWritable };
 }
-function buildIx(name: string, keys: AccountMeta[], args: any = {}): TransactionInstruction {
-  return new TransactionInstruction({ programId: PROGRAM_ID, keys, data: coder.instruction.encode(name, args) });
+function buildIx(
+  name: string,
+  keys: AccountMeta[],
+  args: any = {}
+): TransactionInstruction {
+  return new TransactionInstruction({
+    programId: PROGRAM_ID,
+    keys,
+    data: coder.instruction.encode(name, args),
+  });
 }
 function sendTx(svm: LiteSvm, ix: TransactionInstruction, payer: Keypair) {
   const tx = new Transaction().add(ix);
@@ -243,15 +295,20 @@ function sendTx(svm: LiteSvm, ix: TransactionInstruction, payer: Keypair) {
 }
 function expectOk(res: any) {
   if (res instanceof FailedTransactionMetadata) {
-    throw new Error(`expected success, got failure:\n${res.meta().logs().join("\n")}`);
+    throw new Error(
+      `expected success, got failure:\n${res.meta().logs().join("\n")}`
+    );
   }
 }
 function expectCustomErr(res: any, code: number) {
-  if (!(res instanceof FailedTransactionMetadata)) throw new Error(`expected failure (custom ${code}), got success`);
+  if (!(res instanceof FailedTransactionMetadata))
+    throw new Error(`expected failure (custom ${code}), got success`);
   const e = res.err();
-  if (!(e instanceof TransactionErrorInstructionError)) throw new Error(`expected InstructionError, got ${e.toString()}`);
+  if (!(e instanceof TransactionErrorInstructionError))
+    throw new Error(`expected InstructionError, got ${e.toString()}`);
   const inner = e.err();
-  if (!(inner instanceof InstructionErrorCustom)) throw new Error(`expected Custom, got ${inner.toString()}`);
+  if (!(inner instanceof InstructionErrorCustom))
+    throw new Error(`expected Custom, got ${inner.toString()}`);
   expect(inner.code).to.equal(code);
 }
 function decodeTournament(svm: LiteSvm, pubkey: PublicKey): any {
@@ -271,20 +328,49 @@ describe("organizer-deposit (LiteSVM)", function () {
     const [tournament, bump] = tournamentPda(organizer.publicKey, name);
     const [vault, vaultBump] = vaultPda(tournament);
 
-    await writeAccount(svm, tournament, "tournament", makeTournament({
-      organizer: organizer.publicKey, name, vault, bump, vaultBump,
-      status: { registration: {} }, organizerDeposit: ORGANIZER_DEPOSIT,
-      organizerDepositRefunded: false, bracketSize: 4, participantCount: 2,
-      matchesInitialized: 0, matchesReported: 0, totalMatches: 3,
-    }));
-    writeTokenAccount(svm, vault, tournament, ORGANIZER_DEPOSIT + 2n * ENTRY_FEE);
+    await writeAccount(
+      svm,
+      tournament,
+      "tournament",
+      makeTournament({
+        organizer: organizer.publicKey,
+        name,
+        vault,
+        bump,
+        vaultBump,
+        status: { registration: {} },
+        organizerDeposit: ORGANIZER_DEPOSIT,
+        organizerDepositRefunded: false,
+        bracketSize: 4,
+        participantCount: 2,
+        matchesInitialized: 0,
+        matchesReported: 0,
+        totalMatches: 3,
+      })
+    );
+    writeTokenAccount(
+      svm,
+      vault,
+      tournament,
+      ORGANIZER_DEPOSIT + 2n * ENTRY_FEE
+    );
 
     const p0 = new Keypair().publicKey;
     const p1 = new Keypair().publicKey;
     const [pPda0, pBump0] = participantPda(tournament, p0);
     const [pPda1, pBump1] = participantPda(tournament, p1);
-    await writeAccount(svm, pPda0, "participant", makeParticipant({ tournament, wallet: p0, bump: pBump0 }));
-    await writeAccount(svm, pPda1, "participant", makeParticipant({ tournament, wallet: p1, bump: pBump1 }));
+    await writeAccount(
+      svm,
+      pPda0,
+      "participant",
+      makeParticipant({ tournament, wallet: p0, bump: pBump0 })
+    );
+    await writeAccount(
+      svm,
+      pPda1,
+      "participant",
+      makeParticipant({ tournament, wallet: p1, bump: pBump1 })
+    );
     const ata0 = new Keypair().publicKey;
     const ata1 = new Keypair().publicKey;
     writeTokenAccount(svm, ata0, p0, 0n);
@@ -292,15 +378,21 @@ describe("organizer-deposit (LiteSVM)", function () {
     const organizerAta = new Keypair().publicKey;
     writeTokenAccount(svm, organizerAta, organizer.publicKey, 0n);
 
-    const res = sendTx(svm, buildIx("cancelTournament", [
-      meta(organizer.publicKey, true, true),
-      meta(tournament, false, true),
-      meta(vault, false, true),
-      meta(organizerAta, false, true),
-      meta(TOKEN_PROGRAM, false, false),
-      meta(pPda0, false, true), meta(ata0, false, true),
-      meta(pPda1, false, true), meta(ata1, false, true),
-    ]), organizer);
+    const res = sendTx(
+      svm,
+      buildIx("cancelTournament", [
+        meta(organizer.publicKey, true, true),
+        meta(tournament, false, true),
+        meta(vault, false, true),
+        meta(organizerAta, false, true),
+        meta(TOKEN_PROGRAM, false, false),
+        meta(pPda0, false, true),
+        meta(ata0, false, true),
+        meta(pPda1, false, true),
+        meta(ata1, false, true),
+      ]),
+      organizer
+    );
     expectOk(res);
 
     expect(tokenAmount(svm, organizerAta)).to.equal(ORGANIZER_DEPOSIT);
@@ -325,29 +417,49 @@ describe("organizer-deposit (LiteSVM)", function () {
     const [vault, vaultBump] = vaultPda(tournament);
 
     // Post-first-cancel state: already Cancelled + refunded, vault drained.
-    await writeAccount(svm, tournament, "tournament", makeTournament({
-      organizer, name, vault, bump, vaultBump,
-      status: { cancelled: {} }, organizerDeposit: ORGANIZER_DEPOSIT,
-      organizerDepositRefunded: true, bracketSize: 4, participantCount: 2,
-      matchesInitialized: 0, matchesReported: 0, totalMatches: 3,
-    }));
+    await writeAccount(
+      svm,
+      tournament,
+      "tournament",
+      makeTournament({
+        organizer,
+        name,
+        vault,
+        bump,
+        vaultBump,
+        status: { cancelled: {} },
+        organizerDeposit: ORGANIZER_DEPOSIT,
+        organizerDepositRefunded: true,
+        bracketSize: 4,
+        participantCount: 2,
+        matchesInitialized: 0,
+        matchesReported: 0,
+        totalMatches: 3,
+      })
+    );
     writeTokenAccount(svm, vault, tournament, 0n);
     const organizerAta = new Keypair().publicKey;
     writeTokenAccount(svm, organizerAta, organizer, ORGANIZER_DEPOSIT); // already received
 
-    const res = sendTx(svm, buildIx("cancelTournament", [
-      meta(caller.publicKey, true, true),
-      meta(tournament, false, true),
-      meta(vault, false, true),
-      meta(organizerAta, false, true),
-      meta(TOKEN_PROGRAM, false, false),
-    ]), caller);
+    const res = sendTx(
+      svm,
+      buildIx("cancelTournament", [
+        meta(caller.publicKey, true, true),
+        meta(tournament, false, true),
+        meta(vault, false, true),
+        meta(organizerAta, false, true),
+        meta(TOKEN_PROGRAM, false, false),
+      ]),
+      caller
+    );
     expectOk(res);
 
     // No second transfer — guard short-circuits.
     expect(tokenAmount(svm, organizerAta)).to.equal(ORGANIZER_DEPOSIT);
     expect(tokenAmount(svm, vault)).to.equal(0n);
-    expect(decodeTournament(svm, tournament).organizerDepositRefunded).to.equal(true);
+    expect(decodeTournament(svm, tournament).organizerDepositRefunded).to.equal(
+      true
+    );
   });
 
   // ───────────────────────────────────────────────────────────────────────────
@@ -368,20 +480,56 @@ describe("organizer-deposit (LiteSVM)", function () {
     const champ = new Keypair().publicKey; // player_a / winner
     const loser = new Keypair().publicKey;
 
-    await writeAccount(svm, pcfg, "protocolConfig", makeProtocolConfig({
-      authority: organizer.publicKey, treasury, bump: pcfgBump,
-    }));
-    await writeAccount(svm, tournament, "tournament", makeTournament({
-      organizer: organizer.publicKey, name, vault, bump, vaultBump,
-      status: { active: {} }, organizerDeposit: ORGANIZER_DEPOSIT,
-      organizerDepositRefunded: false, bracketSize: 2, participantCount: 2,
-      matchesInitialized: 1, matchesReported: 0, totalMatches: 1,
-    }));
-    await writeAccount(svm, finalMatch, "matchNode", makeMatch({
-      tournament, round: 0, matchIndex: 0, playerA: champ, playerB: loser, bump: mBump,
-    }));
+    await writeAccount(
+      svm,
+      pcfg,
+      "protocolConfig",
+      makeProtocolConfig({
+        authority: organizer.publicKey,
+        treasury,
+        bump: pcfgBump,
+      })
+    );
+    await writeAccount(
+      svm,
+      tournament,
+      "tournament",
+      makeTournament({
+        organizer: organizer.publicKey,
+        name,
+        vault,
+        bump,
+        vaultBump,
+        status: { active: {} },
+        organizerDeposit: ORGANIZER_DEPOSIT,
+        organizerDepositRefunded: false,
+        bracketSize: 2,
+        participantCount: 2,
+        matchesInitialized: 1,
+        matchesReported: 0,
+        totalMatches: 1,
+      })
+    );
+    await writeAccount(
+      svm,
+      finalMatch,
+      "matchNode",
+      makeMatch({
+        tournament,
+        round: 0,
+        matchIndex: 0,
+        playerA: champ,
+        playerB: loser,
+        bump: mBump,
+      })
+    );
 
-    writeTokenAccount(svm, vault, tournament, 2n * ENTRY_FEE + ORGANIZER_DEPOSIT);
+    writeTokenAccount(
+      svm,
+      vault,
+      tournament,
+      2n * ENTRY_FEE + ORGANIZER_DEPOSIT
+    );
     const organizerAta = new Keypair().publicKey;
     const champAta = new Keypair().publicKey;
     const treasuryAta = new Keypair().publicKey;
@@ -389,18 +537,26 @@ describe("organizer-deposit (LiteSVM)", function () {
     writeTokenAccount(svm, champAta, champ, 0n);
     writeTokenAccount(svm, treasuryAta, treasury, 0n);
 
-    const res = sendTx(svm, buildIx("reportResult", [
-      meta(organizer.publicKey, true, true),
-      meta(tournament, false, true),
-      meta(finalMatch, false, true),
-      meta(PROGRAM_ID, false, false),   // next_match = None
-      meta(pcfg, false, false),
-      meta(vault, false, true),
-      meta(organizerAta, false, true),  // organizer_token_account = Some
-      meta(TOKEN_PROGRAM, false, false),
-      meta(champAta, false, true),      // remaining: placement[0]
-      meta(treasuryAta, false, true),   // remaining: treasury
-    ], { winner: champ, placements: [champ] }), organizer);
+    const res = sendTx(
+      svm,
+      buildIx(
+        "reportResult",
+        [
+          meta(organizer.publicKey, true, true),
+          meta(tournament, false, true),
+          meta(finalMatch, false, true),
+          meta(PROGRAM_ID, false, false), // next_match = None
+          meta(pcfg, false, false),
+          meta(vault, false, true),
+          meta(organizerAta, false, true), // organizer_token_account = Some
+          meta(TOKEN_PROGRAM, false, false),
+          meta(champAta, false, true), // remaining: placement[0]
+          meta(treasuryAta, false, true), // remaining: treasury
+        ],
+        { winner: champ, placements: [champ] }
+      ),
+      organizer
+    );
     expectOk(res);
 
     const basis = 2n * ENTRY_FEE; // Variant A: vault - deposit
@@ -436,36 +592,80 @@ describe("organizer-deposit (LiteSVM)", function () {
     const champ = new Keypair().publicKey;
     const loser = new Keypair().publicKey;
 
-    await writeAccount(svm, pcfg, "protocolConfig", makeProtocolConfig({
-      authority: organizer.publicKey, treasury, bump: pcfgBump,
-    }));
-    await writeAccount(svm, tournament, "tournament", makeTournament({
-      organizer: organizer.publicKey, name, vault, bump, vaultBump,
-      status: { active: {} }, organizerDeposit: ORGANIZER_DEPOSIT,
-      organizerDepositRefunded: false, bracketSize: 2, participantCount: 2,
-      matchesInitialized: 1, matchesReported: 0, totalMatches: 1,
-    }));
-    await writeAccount(svm, finalMatch, "matchNode", makeMatch({
-      tournament, round: 0, matchIndex: 0, playerA: champ, playerB: loser, bump: mBump,
-    }));
-    writeTokenAccount(svm, vault, tournament, 2n * ENTRY_FEE + ORGANIZER_DEPOSIT);
+    await writeAccount(
+      svm,
+      pcfg,
+      "protocolConfig",
+      makeProtocolConfig({
+        authority: organizer.publicKey,
+        treasury,
+        bump: pcfgBump,
+      })
+    );
+    await writeAccount(
+      svm,
+      tournament,
+      "tournament",
+      makeTournament({
+        organizer: organizer.publicKey,
+        name,
+        vault,
+        bump,
+        vaultBump,
+        status: { active: {} },
+        organizerDeposit: ORGANIZER_DEPOSIT,
+        organizerDepositRefunded: false,
+        bracketSize: 2,
+        participantCount: 2,
+        matchesInitialized: 1,
+        matchesReported: 0,
+        totalMatches: 1,
+      })
+    );
+    await writeAccount(
+      svm,
+      finalMatch,
+      "matchNode",
+      makeMatch({
+        tournament,
+        round: 0,
+        matchIndex: 0,
+        playerA: champ,
+        playerB: loser,
+        bump: mBump,
+      })
+    );
+    writeTokenAccount(
+      svm,
+      vault,
+      tournament,
+      2n * ENTRY_FEE + ORGANIZER_DEPOSIT
+    );
     const champAta = new Keypair().publicKey;
     const treasuryAta = new Keypair().publicKey;
     writeTokenAccount(svm, champAta, champ, 0n);
     writeTokenAccount(svm, treasuryAta, treasury, 0n);
 
-    const res = sendTx(svm, buildIx("reportResult", [
-      meta(organizer.publicKey, true, true),
-      meta(tournament, false, true),
-      meta(finalMatch, false, true),
-      meta(PROGRAM_ID, false, false),   // next_match = None
-      meta(pcfg, false, false),
-      meta(vault, false, true),
-      meta(PROGRAM_ID, false, false),   // organizer_token_account = None  ← the bug
-      meta(TOKEN_PROGRAM, false, false),
-      meta(champAta, false, true),
-      meta(treasuryAta, false, true),
-    ], { winner: champ, placements: [champ] }), organizer);
+    const res = sendTx(
+      svm,
+      buildIx(
+        "reportResult",
+        [
+          meta(organizer.publicKey, true, true),
+          meta(tournament, false, true),
+          meta(finalMatch, false, true),
+          meta(PROGRAM_ID, false, false), // next_match = None
+          meta(pcfg, false, false),
+          meta(vault, false, true),
+          meta(PROGRAM_ID, false, false), // organizer_token_account = None  ← the bug
+          meta(TOKEN_PROGRAM, false, false),
+          meta(champAta, false, true),
+          meta(treasuryAta, false, true),
+        ],
+        { winner: champ, placements: [champ] }
+      ),
+      organizer
+    );
     expectCustomErr(res, ERR_INVALID_VAULT);
   });
 });

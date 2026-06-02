@@ -52,7 +52,11 @@ describe("bracket-chain", function () {
   before(async () => {
     usdcMint = await createUsdcLikeMint(provider);
     treasuryWallet = Keypair.generate();
-    treasuryAta = await makeAtaOnly(provider, usdcMint, treasuryWallet.publicKey);
+    treasuryAta = await makeAtaOnly(
+      provider,
+      usdcMint,
+      treasuryWallet.publicKey
+    );
 
     [protocolConfigPda] = findProtocolConfigPda(programId);
 
@@ -78,8 +82,14 @@ describe("bracket-chain", function () {
     // Organizer pays rent for Tournament + Vault + all MatchNode PDAs.
     // 128-player → 127 matches × ~0.00188 SOL rent ≈ 0.24 SOL → bump to 1.5 SOL safe.
     const organizerSol = opts.maxParticipants > 16 ? 1.5 : 0.1;
-    const organizer = (await makeFundedWallet(provider, usdcMint, new BN(0), organizerSol)).keypair;
-    const [tournamentPda] = findTournamentPda(organizer.publicKey, opts.name, programId);
+    const organizer = (
+      await makeFundedWallet(provider, usdcMint, new BN(0), organizerSol)
+    ).keypair;
+    const [tournamentPda] = findTournamentPda(
+      organizer.publicKey,
+      opts.name,
+      programId
+    );
     const [vaultPda] = findVaultPda(tournamentPda, programId);
 
     const deadline = new BN(Math.floor(Date.now() / 1000) + 3600);
@@ -93,7 +103,7 @@ describe("bracket-chain", function () {
         new BN(0),
         { manual: {} }, // game: Manual (no SAS identity required)
         { organizerOnly: {} }, // settlement_mode
-        0, // dispute_window_secs
+        0 // dispute_window_secs
       )
       .accountsPartial({
         organizer: organizer.publicKey,
@@ -109,10 +119,18 @@ describe("bracket-chain", function () {
       .signers([organizer])
       .rpc();
 
-    const players: { keypair: Keypair; ata: PublicKey; participantPda: PublicKey }[] = [];
+    const players: {
+      keypair: Keypair;
+      ata: PublicKey;
+      participantPda: PublicKey;
+    }[] = [];
     for (let i = 0; i < opts.playerCount; i++) {
       const w = await makeFundedWallet(provider, usdcMint, ENTRY_FEE);
-      const [participantPda] = findParticipantPda(tournamentPda, w.keypair.publicKey, programId);
+      const [participantPda] = findParticipantPda(
+        tournamentPda,
+        w.keypair.publicKey,
+        programId
+      );
       await program.methods
         .joinTournament()
         .accountsPartial({
@@ -143,10 +161,20 @@ describe("bracket-chain", function () {
     nextRound: number,
     nextMatchIndex: number,
     winner: PublicKey,
-    vaultPda: PublicKey,
+    vaultPda: PublicKey
   ) {
-    const [matchPda] = findMatchPda(tournamentPda, round, matchIndex, programId);
-    const [nextMatchPda] = findMatchPda(tournamentPda, nextRound, nextMatchIndex, programId);
+    const [matchPda] = findMatchPda(
+      tournamentPda,
+      round,
+      matchIndex,
+      programId
+    );
+    const [nextMatchPda] = findMatchPda(
+      tournamentPda,
+      nextRound,
+      nextMatchIndex,
+      programId
+    );
 
     await program.methods
       .reportResult(winner, [])
@@ -171,11 +199,20 @@ describe("bracket-chain", function () {
     finalRound: number,
     placements: PublicKey[],
     placementAtas: PublicKey[],
-    vaultPda: PublicKey,
+    vaultPda: PublicKey
   ) {
-    const [finalMatchPda] = findMatchPda(tournamentPda, finalRound, 0, programId);
+    const [finalMatchPda] = findMatchPda(
+      tournamentPda,
+      finalRound,
+      0,
+      programId
+    );
     const remaining: AccountMeta[] = [
-      ...placementAtas.map((pubkey) => ({ pubkey, isSigner: false, isWritable: true })),
+      ...placementAtas.map((pubkey) => ({
+        pubkey,
+        isSigner: false,
+        isWritable: true,
+      })),
       { pubkey: treasuryAta, isSigner: false, isWritable: true },
     ];
 
@@ -202,25 +239,91 @@ describe("bracket-chain", function () {
   it("WTA: 8-player happy path distributes 96.5% to champion + 3.5% fee", async () => {
     const treasuryBefore = await tokenBalance(provider.connection, treasuryAta);
 
-    const { organizer, tournamentPda, vaultPda, players } = await createAndJoin({
-      name: "wta-8",
-      payoutPreset: { winnerTakesAll: {} },
-      maxParticipants: 8,
-      playerCount: 8,
-    });
+    const { organizer, tournamentPda, vaultPda, players } = await createAndJoin(
+      {
+        name: "wta-8",
+        payoutPreset: { winnerTakesAll: {} },
+        maxParticipants: 8,
+        playerCount: 8,
+      }
+    );
 
     const playerKeys = players.map((p) => p.keypair.publicKey);
-    const { descriptors, matchPdas } = buildBracketDescriptors(tournamentPda, playerKeys, programId);
-    await sendStartChunks(program, organizer, tournamentPda, descriptors, matchPdas);
+    const { descriptors, matchPdas } = buildBracketDescriptors(
+      tournamentPda,
+      playerKeys,
+      programId
+    );
+    await sendStartChunks(
+      program,
+      organizer,
+      tournamentPda,
+      descriptors,
+      matchPdas
+    );
 
     // Round 0: winners are players[0,2,4,6] (left of each pair).
-    await reportNonFinal(organizer, tournamentPda, 0, 0, 1, 0, playerKeys[0], vaultPda);
-    await reportNonFinal(organizer, tournamentPda, 0, 1, 1, 0, playerKeys[2], vaultPda);
-    await reportNonFinal(organizer, tournamentPda, 0, 2, 1, 1, playerKeys[4], vaultPda);
-    await reportNonFinal(organizer, tournamentPda, 0, 3, 1, 1, playerKeys[6], vaultPda);
+    await reportNonFinal(
+      organizer,
+      tournamentPda,
+      0,
+      0,
+      1,
+      0,
+      playerKeys[0],
+      vaultPda
+    );
+    await reportNonFinal(
+      organizer,
+      tournamentPda,
+      0,
+      1,
+      1,
+      0,
+      playerKeys[2],
+      vaultPda
+    );
+    await reportNonFinal(
+      organizer,
+      tournamentPda,
+      0,
+      2,
+      1,
+      1,
+      playerKeys[4],
+      vaultPda
+    );
+    await reportNonFinal(
+      organizer,
+      tournamentPda,
+      0,
+      3,
+      1,
+      1,
+      playerKeys[6],
+      vaultPda
+    );
     // Round 1: winners are players[0,4].
-    await reportNonFinal(organizer, tournamentPda, 1, 0, 2, 0, playerKeys[0], vaultPda);
-    await reportNonFinal(organizer, tournamentPda, 1, 1, 2, 0, playerKeys[4], vaultPda);
+    await reportNonFinal(
+      organizer,
+      tournamentPda,
+      1,
+      0,
+      2,
+      0,
+      playerKeys[0],
+      vaultPda
+    );
+    await reportNonFinal(
+      organizer,
+      tournamentPda,
+      1,
+      1,
+      2,
+      0,
+      playerKeys[4],
+      vaultPda
+    );
 
     // Final
     const champion = playerKeys[0];
@@ -230,7 +333,7 @@ describe("bracket-chain", function () {
       2,
       [champion],
       [players[0].ata],
-      vaultPda,
+      vaultPda
     );
 
     const grossPool = 8n * BigInt(ENTRY_FEE.toString());
@@ -238,7 +341,9 @@ describe("bracket-chain", function () {
     const expectedNet = grossPool - expectedFee;
 
     const treasuryAfter = await tokenBalance(provider.connection, treasuryAta);
-    expect(await tokenBalance(provider.connection, players[0].ata)).to.equal(expectedNet);
+    expect(await tokenBalance(provider.connection, players[0].ata)).to.equal(
+      expectedNet
+    );
     expect(treasuryAfter - treasuryBefore).to.equal(expectedFee);
     expect(await tokenBalance(provider.connection, vaultPda)).to.equal(0n);
 
@@ -247,7 +352,9 @@ describe("bracket-chain", function () {
     expect(t.champion.toBase58()).to.equal(champion.toBase58());
 
     const cu = await measureCu(provider.connection, finalSig);
-    console.log(`  [CU] report_result FINAL (WTA, 8p, 1 placement + treasury): ${cu}`);
+    console.log(
+      `  [CU] report_result FINAL (WTA, 8p, 1 placement + treasury): ${cu}`
+    );
     expect(cu).to.be.lessThan(1_400_000);
   });
 
@@ -257,32 +364,105 @@ describe("bracket-chain", function () {
   it("Standard: 8-player happy path splits 60/25/15 + 3.5% fee", async () => {
     const treasuryBefore = await tokenBalance(provider.connection, treasuryAta);
 
-    const { organizer, tournamentPda, vaultPda, players } = await createAndJoin({
-      name: "std-8",
-      payoutPreset: { standard: {} },
-      maxParticipants: 8,
-      playerCount: 8,
-    });
+    const { organizer, tournamentPda, vaultPda, players } = await createAndJoin(
+      {
+        name: "std-8",
+        payoutPreset: { standard: {} },
+        maxParticipants: 8,
+        playerCount: 8,
+      }
+    );
 
     const playerKeys = players.map((p) => p.keypair.publicKey);
-    const { descriptors, matchPdas } = buildBracketDescriptors(tournamentPda, playerKeys, programId);
-    await sendStartChunks(program, organizer, tournamentPda, descriptors, matchPdas);
+    const { descriptors, matchPdas } = buildBracketDescriptors(
+      tournamentPda,
+      playerKeys,
+      programId
+    );
+    await sendStartChunks(
+      program,
+      organizer,
+      tournamentPda,
+      descriptors,
+      matchPdas
+    );
 
     // Decide outcomes:
     //   final: players[0] vs players[4] → players[0] wins (champ)
     //   semis: players[0] beats players[2]; players[4] beats players[6]
     //   so 2nd place (final loser) = players[4]
     //   3rd place = the semifinal loser we choose (organizer-trusted) = players[2]
-    await reportNonFinal(organizer, tournamentPda, 0, 0, 1, 0, playerKeys[0], vaultPda);
-    await reportNonFinal(organizer, tournamentPda, 0, 1, 1, 0, playerKeys[2], vaultPda);
-    await reportNonFinal(organizer, tournamentPda, 0, 2, 1, 1, playerKeys[4], vaultPda);
-    await reportNonFinal(organizer, tournamentPda, 0, 3, 1, 1, playerKeys[6], vaultPda);
-    await reportNonFinal(organizer, tournamentPda, 1, 0, 2, 0, playerKeys[0], vaultPda);
-    await reportNonFinal(organizer, tournamentPda, 1, 1, 2, 0, playerKeys[4], vaultPda);
+    await reportNonFinal(
+      organizer,
+      tournamentPda,
+      0,
+      0,
+      1,
+      0,
+      playerKeys[0],
+      vaultPda
+    );
+    await reportNonFinal(
+      organizer,
+      tournamentPda,
+      0,
+      1,
+      1,
+      0,
+      playerKeys[2],
+      vaultPda
+    );
+    await reportNonFinal(
+      organizer,
+      tournamentPda,
+      0,
+      2,
+      1,
+      1,
+      playerKeys[4],
+      vaultPda
+    );
+    await reportNonFinal(
+      organizer,
+      tournamentPda,
+      0,
+      3,
+      1,
+      1,
+      playerKeys[6],
+      vaultPda
+    );
+    await reportNonFinal(
+      organizer,
+      tournamentPda,
+      1,
+      0,
+      2,
+      0,
+      playerKeys[0],
+      vaultPda
+    );
+    await reportNonFinal(
+      organizer,
+      tournamentPda,
+      1,
+      1,
+      2,
+      0,
+      playerKeys[4],
+      vaultPda
+    );
 
     const placements = [playerKeys[0], playerKeys[4], playerKeys[2]];
     const placementAtas = [players[0].ata, players[4].ata, players[2].ata];
-    const finalSig = await reportFinal(organizer, tournamentPda, 2, placements, placementAtas, vaultPda);
+    const finalSig = await reportFinal(
+      organizer,
+      tournamentPda,
+      2,
+      placements,
+      placementAtas,
+      vaultPda
+    );
 
     const gross = 8n * BigInt(ENTRY_FEE.toString());
     const fee = (gross * 350n) / 10_000n;
@@ -292,15 +472,25 @@ describe("bracket-chain", function () {
     const p3 = (net * 1500n) / 10_000n;
 
     const treasuryAfter = await tokenBalance(provider.connection, treasuryAta);
-    expect(await tokenBalance(provider.connection, players[0].ata)).to.equal(p1);
-    expect(await tokenBalance(provider.connection, players[4].ata)).to.equal(p2);
-    expect(await tokenBalance(provider.connection, players[2].ata)).to.equal(p3);
+    expect(await tokenBalance(provider.connection, players[0].ata)).to.equal(
+      p1
+    );
+    expect(await tokenBalance(provider.connection, players[4].ata)).to.equal(
+      p2
+    );
+    expect(await tokenBalance(provider.connection, players[2].ata)).to.equal(
+      p3
+    );
     expect(treasuryAfter - treasuryBefore).to.equal(fee);
     // Vault drains (allow up to a few lamports of rounding remainder; bps math is exact for 8e6).
-    expect(await tokenBalance(provider.connection, vaultPda)).to.equal(gross - p1 - p2 - p3 - fee);
+    expect(await tokenBalance(provider.connection, vaultPda)).to.equal(
+      gross - p1 - p2 - p3 - fee
+    );
 
     const cu = await measureCu(provider.connection, finalSig);
-    console.log(`  [CU] report_result FINAL (Standard, 8p, 3 placements + treasury): ${cu}`);
+    console.log(
+      `  [CU] report_result FINAL (Standard, 8p, 3 placements + treasury): ${cu}`
+    );
     expect(cu).to.be.lessThan(1_400_000);
   });
 
@@ -308,16 +498,22 @@ describe("bracket-chain", function () {
   // 3. Cancel + refund — 4 joined → cancel → all refunded, vault drains
   // ───────────────────────────────────────────────────────────────────────────
   it("Cancel: 4 joined → cancel refunds all, vault drains to 0", async () => {
-    const { organizer, tournamentPda, vaultPda, players } = await createAndJoin({
-      name: "cancel-4",
-      payoutPreset: { winnerTakesAll: {} },
-      maxParticipants: 8,
-      playerCount: 4,
-    });
+    const { organizer, tournamentPda, vaultPda, players } = await createAndJoin(
+      {
+        name: "cancel-4",
+        payoutPreset: { winnerTakesAll: {} },
+        maxParticipants: 8,
+        playerCount: 4,
+      }
+    );
 
     const remaining: AccountMeta[] = [];
     for (const p of players) {
-      remaining.push({ pubkey: p.participantPda, isSigner: false, isWritable: true });
+      remaining.push({
+        pubkey: p.participantPda,
+        isSigner: false,
+        isWritable: true,
+      });
       remaining.push({ pubkey: p.ata, isSigner: false, isWritable: true });
     }
 
@@ -335,7 +531,9 @@ describe("bracket-chain", function () {
       .rpc();
 
     for (const p of players) {
-      expect(await tokenBalance(provider.connection, p.ata)).to.equal(BigInt(ENTRY_FEE.toString()));
+      expect(await tokenBalance(provider.connection, p.ata)).to.equal(
+        BigInt(ENTRY_FEE.toString())
+      );
     }
     expect(await tokenBalance(provider.connection, vaultPda)).to.equal(0n);
 
@@ -343,7 +541,9 @@ describe("bracket-chain", function () {
     expect(t.status).to.deep.equal({ cancelled: {} });
 
     const cu = await measureCu(provider.connection, cancelSig);
-    console.log(`  [CU] cancel_tournament (4 participants, single chunk, no deposit): ${cu}`);
+    console.log(
+      `  [CU] cancel_tournament (4 participants, single chunk, no deposit): ${cu}`
+    );
     expect(cu).to.be.lessThan(1_400_000);
   });
 
@@ -353,12 +553,14 @@ describe("bracket-chain", function () {
   it("Bye: 7-player tournament finishes with one round-0 bye", async () => {
     const treasuryBefore = await tokenBalance(provider.connection, treasuryAta);
 
-    const { organizer, tournamentPda, vaultPda, players } = await createAndJoin({
-      name: "bye-7",
-      payoutPreset: { winnerTakesAll: {} },
-      maxParticipants: 8,
-      playerCount: 7,
-    });
+    const { organizer, tournamentPda, vaultPda, players } = await createAndJoin(
+      {
+        name: "bye-7",
+        payoutPreset: { winnerTakesAll: {} },
+        maxParticipants: 8,
+        playerCount: 7,
+      }
+    );
 
     // Pad with default to put bye at slot 0 (player_a = players[0]).
     // builder treats players[2m+1]==default as bye for players[2m].
@@ -380,9 +582,15 @@ describe("bracket-chain", function () {
     const { descriptors, matchPdas } = buildBracketWithCustomSeats(
       tournamentPda,
       playerKeys,
-      programId,
+      programId
     );
-    await sendStartChunks(program, organizer, tournamentPda, descriptors, matchPdas);
+    await sendStartChunks(
+      program,
+      organizer,
+      tournamentPda,
+      descriptors,
+      matchPdas
+    );
 
     // After init: round-0 match 0 = bye-completed (winner = players[0]).
     // Remaining round-0 matches: (1,2)→winner players[1]; (3,4)→players[3]; (5,6)→players[5].
@@ -394,7 +602,14 @@ describe("bracket-chain", function () {
     await reportNonFinal(organizer, tournamentPda, 1, 0, 2, 0, pk[0], vaultPda);
     await reportNonFinal(organizer, tournamentPda, 1, 1, 2, 0, pk[3], vaultPda);
     // Final
-    await reportFinal(organizer, tournamentPda, 2, [pk[0]], [players[0].ata], vaultPda);
+    await reportFinal(
+      organizer,
+      tournamentPda,
+      2,
+      [pk[0]],
+      [players[0].ata],
+      vaultPda
+    );
 
     const t = await program.account.tournament.fetch(tournamentPda);
     expect(t.status).to.deep.equal({ completed: {} });
@@ -403,7 +618,9 @@ describe("bracket-chain", function () {
     const gross = 7n * BigInt(ENTRY_FEE.toString());
     const fee = (gross * 350n) / 10_000n;
     const treasuryAfter = await tokenBalance(provider.connection, treasuryAta);
-    expect(await tokenBalance(provider.connection, players[0].ata)).to.equal(gross - fee);
+    expect(await tokenBalance(provider.connection, players[0].ata)).to.equal(
+      gross - fee
+    );
     expect(treasuryAfter - treasuryBefore).to.equal(fee);
   });
 
@@ -421,12 +638,24 @@ describe("bracket-chain", function () {
     });
 
     const playerKeys = players.map((p) => p.keypair.publicKey);
-    const { descriptors, matchPdas } = buildBracketDescriptors(tournamentPda, playerKeys, programId);
+    const { descriptors, matchPdas } = buildBracketDescriptors(
+      tournamentPda,
+      playerKeys,
+      programId
+    );
 
     // 127 matches across multiple chunks at chunk_size=7 → 19 chunks total.
     // See comment on sendStartChunks for the size-budget derivation
     // (chunk 8 was 1234 bytes — 2 over the 1232 legacy-tx limit).
-    const sigs = await sendStartChunks(program, organizer, tournamentPda, descriptors, matchPdas, 7, 1_400_000);
+    const sigs = await sendStartChunks(
+      program,
+      organizer,
+      tournamentPda,
+      descriptors,
+      matchPdas,
+      7,
+      1_400_000
+    );
     expect(sigs.length).to.be.greaterThan(1);
 
     const t = await program.account.tournament.fetch(tournamentPda);
@@ -444,7 +673,7 @@ describe("bracket-chain", function () {
 function buildBracketWithCustomSeats(
   tournament: PublicKey,
   seats: PublicKey[],
-  programId: PublicKey,
+  programId: PublicKey
 ): { descriptors: MatchInitDescriptor[]; matchPdas: PublicKey[] } {
   const bracketSize = seats.length;
   if ((bracketSize & (bracketSize - 1)) !== 0) {
@@ -463,7 +692,14 @@ function buildBracketWithCustomSeats(
     const playerA = isBye ? (a.equals(PublicKey.default) ? b : a) : a;
     const playerB = isBye ? PublicKey.default : b;
     const [pda, bump] = findMatchPda(tournament, 0, m, programId);
-    descriptors.push({ round: 0, matchIndex: m, bump, playerA, playerB, bye: isBye });
+    descriptors.push({
+      round: 0,
+      matchIndex: m,
+      bump,
+      playerA,
+      playerB,
+      bye: isBye,
+    });
     matchPdas.push(pda);
     r0Bye.push(isBye ? playerA : null);
   }
@@ -478,7 +714,14 @@ function buildBracketWithCustomSeats(
         playerB = r0Bye[2 * m + 1] ?? PublicKey.default;
       }
       const [pda, bump] = findMatchPda(tournament, r, m, programId);
-      descriptors.push({ round: r, matchIndex: m, bump, playerA, playerB, bye: false });
+      descriptors.push({
+        round: r,
+        matchIndex: m,
+        bump,
+        playerA,
+        playerB,
+        bye: false,
+      });
       matchPdas.push(pda);
     }
   }

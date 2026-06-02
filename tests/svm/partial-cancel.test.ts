@@ -27,9 +27,11 @@ import { BracketChain } from "../../target/types/bracket_chain";
 // (the refund loop is a near-verbatim copy of the validator-tested
 // `cancel_tournament`).
 
-const PROGRAM_ID = new PublicKey("3YpkUKBh8288XN2dCKSwBnEdyc5UozSJ19A1ZCLpUZsZ");
+const PROGRAM_ID = new PublicKey(
+  "3YpkUKBh8288XN2dCKSwBnEdyc5UozSJ19A1ZCLpUZsZ"
+);
 const TOKEN_PROGRAM = new PublicKey(
-  "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+  "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
 );
 
 const ERR_UNAUTHORIZED = 6000;
@@ -40,22 +42,28 @@ const program = new Program<BracketChain>(idl as any, stubProvider);
 const coder = program.coder;
 
 // ── PDAs ──────────────────────────────────────────────────────────────────
-function tournamentPda(organizer: PublicKey, name: string): [PublicKey, number] {
+function tournamentPda(
+  organizer: PublicKey,
+  name: string
+): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
     [Buffer.from("tournament"), organizer.toBuffer(), Buffer.from(name)],
-    PROGRAM_ID,
+    PROGRAM_ID
   );
 }
 function vaultPda(tournament: PublicKey): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
     [Buffer.from("vault"), tournament.toBuffer()],
-    PROGRAM_ID,
+    PROGRAM_ID
   );
 }
-function participantPda(tournament: PublicKey, wallet: PublicKey): [PublicKey, number] {
+function participantPda(
+  tournament: PublicKey,
+  wallet: PublicKey
+): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
     [Buffer.from("participant"), tournament.toBuffer(), wallet.toBuffer()],
-    PROGRAM_ID,
+    PROGRAM_ID
   );
 }
 
@@ -130,31 +138,61 @@ function bootSvm(): LiteSvm {
   svm.setSysvars();
   svm.addProgramFromFile(
     PROGRAM_ID.toBytes(),
-    path.join(__dirname, "..", "..", "target", "deploy", "bracket_chain.so"),
+    path.join(__dirname, "..", "..", "target", "deploy", "bracket_chain.so")
   );
   return svm;
 }
-async function writeAccount(svm: LiteSvm, pubkey: PublicKey, name: "tournament" | "participant", obj: any) {
+async function writeAccount(
+  svm: LiteSvm,
+  pubkey: PublicKey,
+  name: "tournament" | "participant",
+  obj: any
+) {
   const data = await coder.accounts.encode(name, obj);
   const lamports = svm.minimumBalanceForRentExemption(BigInt(data.length));
-  svm.setAccount(pubkey.toBytes(), new LiteAccount(lamports, data, PROGRAM_ID.toBytes(), false, 0n));
+  svm.setAccount(
+    pubkey.toBytes(),
+    new LiteAccount(lamports, data, PROGRAM_ID.toBytes(), false, 0n)
+  );
 }
-function writeTokenAccount(svm: LiteSvm, pubkey: PublicKey, mint: PublicKey, owner: PublicKey, amount: bigint) {
+function writeTokenAccount(
+  svm: LiteSvm,
+  pubkey: PublicKey,
+  mint: PublicKey,
+  owner: PublicKey,
+  amount: bigint
+) {
   const buf = Buffer.alloc(165);
   mint.toBuffer().copy(buf, 0);
   owner.toBuffer().copy(buf, 32);
   buf.writeBigUInt64LE(amount, 64);
   buf.writeUInt8(1, 108);
   const lamports = svm.minimumBalanceForRentExemption(165n);
-  svm.setAccount(pubkey.toBytes(), new LiteAccount(lamports, buf, TOKEN_PROGRAM.toBytes(), false, 0n));
+  svm.setAccount(
+    pubkey.toBytes(),
+    new LiteAccount(lamports, buf, TOKEN_PROGRAM.toBytes(), false, 0n)
+  );
 }
 function buildIx(name: string, keys: AccountMeta[]): TransactionInstruction {
-  return new TransactionInstruction({ programId: PROGRAM_ID, keys, data: coder.instruction.encode(name, {}) });
+  return new TransactionInstruction({
+    programId: PROGRAM_ID,
+    keys,
+    data: coder.instruction.encode(name, {}),
+  });
 }
-function meta(pubkey: PublicKey, isSigner: boolean, isWritable: boolean): AccountMeta {
+function meta(
+  pubkey: PublicKey,
+  isSigner: boolean,
+  isWritable: boolean
+): AccountMeta {
   return { pubkey, isSigner, isWritable };
 }
-function sendTx(svm: LiteSvm, ix: TransactionInstruction, payer: Keypair, extra: Keypair[] = []) {
+function sendTx(
+  svm: LiteSvm,
+  ix: TransactionInstruction,
+  payer: Keypair,
+  extra: Keypair[] = []
+) {
   const tx = new Transaction().add(ix);
   tx.recentBlockhash = svm.latestBlockhash();
   tx.feePayer = payer.publicKey;
@@ -162,22 +200,37 @@ function sendTx(svm: LiteSvm, ix: TransactionInstruction, payer: Keypair, extra:
   return svm.sendLegacyTransaction(tx.serialize());
 }
 function expectCustomErr(res: any, code: number) {
-  if (!(res instanceof FailedTransactionMetadata)) throw new Error(`expected failure (custom ${code}), got success`);
+  if (!(res instanceof FailedTransactionMetadata))
+    throw new Error(`expected failure (custom ${code}), got success`);
   const e = res.err();
-  if (!(e instanceof TransactionErrorInstructionError)) throw new Error(`expected InstructionError, got ${e.toString()}`);
+  if (!(e instanceof TransactionErrorInstructionError))
+    throw new Error(`expected InstructionError, got ${e.toString()}`);
   const inner = e.err();
-  if (!(inner instanceof InstructionErrorCustom)) throw new Error(`expected Custom, got ${inner.toString()}`);
+  if (!(inner instanceof InstructionErrorCustom))
+    throw new Error(`expected Custom, got ${inner.toString()}`);
   expect(inner.code).to.equal(code);
 }
 function expectOk(res: any) {
-  if (res instanceof FailedTransactionMetadata) throw new Error(`expected success, got failure:\n${res.meta().logs().join("\n")}`);
+  if (res instanceof FailedTransactionMetadata)
+    throw new Error(
+      `expected success, got failure:\n${res.meta().logs().join("\n")}`
+    );
 }
 
-async function setupTournament(svm: LiteSvm, organizer: PublicKey, status: any) {
+async function setupTournament(
+  svm: LiteSvm,
+  organizer: PublicKey,
+  status: any
+) {
   const name = "PC Cup";
   const [tournament, bump] = tournamentPda(organizer, name);
   const [vault, vaultBump] = vaultPda(tournament);
-  await writeAccount(svm, tournament, "tournament", makeTournament({ organizer, name, vault, bump, vaultBump, status }));
+  await writeAccount(
+    svm,
+    tournament,
+    "tournament",
+    makeTournament({ organizer, name, vault, bump, vaultBump, status })
+  );
   writeTokenAccount(svm, vault, PublicKey.default, tournament, 4_000_000n);
   return { tournament, vault };
 }
@@ -188,7 +241,9 @@ describe("partial-cancel (LiteSVM)", function () {
       const svm = bootSvm();
       const organizer = new Keypair();
       svm.airdrop(organizer.publicKey.toBytes(), 10n ** 9n);
-      const { tournament } = await setupTournament(svm, organizer.publicKey, { active: {} });
+      const { tournament } = await setupTournament(svm, organizer.publicKey, {
+        active: {},
+      });
 
       const res = sendTx(
         svm,
@@ -196,12 +251,15 @@ describe("partial-cancel (LiteSVM)", function () {
           meta(organizer.publicKey, true, false),
           meta(tournament, false, true),
         ]),
-        organizer,
+        organizer
       );
       expectOk(res);
 
       const acc = svm.getAccount(tournament.toBytes())!;
-      const decoded: any = coder.accounts.decode("tournament", Buffer.from(acc.data()));
+      const decoded: any = coder.accounts.decode(
+        "tournament",
+        Buffer.from(acc.data())
+      );
       expect(Object.keys(decoded.status)[0]).to.equal("partialCancelled");
     });
 
@@ -210,7 +268,9 @@ describe("partial-cancel (LiteSVM)", function () {
       const organizer = new Keypair().publicKey;
       const stranger = new Keypair();
       svm.airdrop(stranger.publicKey.toBytes(), 10n ** 9n);
-      const { tournament } = await setupTournament(svm, organizer, { active: {} });
+      const { tournament } = await setupTournament(svm, organizer, {
+        active: {},
+      });
 
       const res = sendTx(
         svm,
@@ -218,7 +278,7 @@ describe("partial-cancel (LiteSVM)", function () {
           meta(stranger.publicKey, true, false),
           meta(tournament, false, true),
         ]),
-        stranger,
+        stranger
       );
       expectCustomErr(res, ERR_UNAUTHORIZED);
     });
@@ -227,7 +287,9 @@ describe("partial-cancel (LiteSVM)", function () {
       const svm = bootSvm();
       const organizer = new Keypair();
       svm.airdrop(organizer.publicKey.toBytes(), 10n ** 9n);
-      const { tournament } = await setupTournament(svm, organizer.publicKey, { registration: {} });
+      const { tournament } = await setupTournament(svm, organizer.publicKey, {
+        registration: {},
+      });
 
       const res = sendTx(
         svm,
@@ -235,21 +297,29 @@ describe("partial-cancel (LiteSVM)", function () {
           meta(organizer.publicKey, true, false),
           meta(tournament, false, true),
         ]),
-        organizer,
+        organizer
       );
       expectCustomErr(res, ERR_TOURNAMENT_IN_PROGRESS);
     });
   });
 
   describe("partial_refund_chunk", function () {
-    function refundKeys(caller: PublicKey, tournament: PublicKey, vault: PublicKey, pairs: PublicKey[][]): AccountMeta[] {
+    function refundKeys(
+      caller: PublicKey,
+      tournament: PublicKey,
+      vault: PublicKey,
+      pairs: PublicKey[][]
+    ): AccountMeta[] {
       return [
         meta(caller, true, true),
         meta(tournament, false, true),
         meta(vault, false, true),
         meta(PROGRAM_ID, false, false), // organizer_token_account = None
         meta(TOKEN_PROGRAM, false, false),
-        ...pairs.flatMap(([p, a]) => [meta(p, false, true), meta(a, false, true)]),
+        ...pairs.flatMap(([p, a]) => [
+          meta(p, false, true),
+          meta(a, false, true),
+        ]),
       ];
     }
 
@@ -258,12 +328,17 @@ describe("partial-cancel (LiteSVM)", function () {
       const caller = new Keypair();
       svm.airdrop(caller.publicKey.toBytes(), 10n ** 9n);
       const organizer = new Keypair().publicKey;
-      const { tournament, vault } = await setupTournament(svm, organizer, { active: {} });
+      const { tournament, vault } = await setupTournament(svm, organizer, {
+        active: {},
+      });
 
       const res = sendTx(
         svm,
-        buildIx("partialRefundChunk", refundKeys(caller.publicKey, tournament, vault, [])),
-        caller,
+        buildIx(
+          "partialRefundChunk",
+          refundKeys(caller.publicKey, tournament, vault, [])
+        ),
+        caller
       );
       expectCustomErr(res, ERR_TOURNAMENT_IN_PROGRESS);
     });
@@ -273,17 +348,33 @@ describe("partial-cancel (LiteSVM)", function () {
       const caller = new Keypair();
       svm.airdrop(caller.publicKey.toBytes(), 10n ** 9n);
       const organizer = new Keypair().publicKey;
-      const { tournament, vault } = await setupTournament(svm, organizer, { partialCancelled: {} });
+      const { tournament, vault } = await setupTournament(svm, organizer, {
+        partialCancelled: {},
+      });
 
       const wallet = new Keypair().publicKey;
       const [pPda, pBump] = participantPda(tournament, wallet);
-      await writeAccount(svm, pPda, "participant", makeParticipant({ tournament, wallet, bump: pBump, refundPaid: true, losses: 1 }));
+      await writeAccount(
+        svm,
+        pPda,
+        "participant",
+        makeParticipant({
+          tournament,
+          wallet,
+          bump: pBump,
+          refundPaid: true,
+          losses: 1,
+        })
+      );
       const dummyAta = new Keypair().publicKey; // not touched — participant already refunded
 
       const res = sendTx(
         svm,
-        buildIx("partialRefundChunk", refundKeys(caller.publicKey, tournament, vault, [[pPda, dummyAta]])),
-        caller,
+        buildIx(
+          "partialRefundChunk",
+          refundKeys(caller.publicKey, tournament, vault, [[pPda, dummyAta]])
+        ),
+        caller
       );
       expectOk(res);
     });

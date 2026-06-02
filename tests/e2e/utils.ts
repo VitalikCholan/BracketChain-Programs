@@ -38,42 +38,44 @@ export type MatchInitDescriptor = {
 // ─────────────────────────────────────────────────────────────────────────────
 // PDAs
 // ─────────────────────────────────────────────────────────────────────────────
-export function findProtocolConfigPda(programId: PublicKey): [PublicKey, number] {
+export function findProtocolConfigPda(
+  programId: PublicKey
+): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
     [Buffer.from("protocol_config")],
-    programId,
+    programId
   );
 }
 
 export function findTournamentPda(
   organizer: PublicKey,
   name: string,
-  programId: PublicKey,
+  programId: PublicKey
 ): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
     [Buffer.from("tournament"), organizer.toBuffer(), Buffer.from(name)],
-    programId,
+    programId
   );
 }
 
 export function findVaultPda(
   tournament: PublicKey,
-  programId: PublicKey,
+  programId: PublicKey
 ): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
     [Buffer.from("vault"), tournament.toBuffer()],
-    programId,
+    programId
   );
 }
 
 export function findParticipantPda(
   tournament: PublicKey,
   wallet: PublicKey,
-  programId: PublicKey,
+  programId: PublicKey
 ): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
     [Buffer.from("participant"), tournament.toBuffer(), wallet.toBuffer()],
-    programId,
+    programId
   );
 }
 
@@ -82,7 +84,7 @@ export function findMatchPda(
   round: number,
   matchIndex: number,
   programId: PublicKey,
-  bracket = 0,
+  bracket = 0
 ): [PublicKey, number] {
   const matchIndexLe = Buffer.alloc(2);
   matchIndexLe.writeUInt16LE(matchIndex, 0);
@@ -94,7 +96,7 @@ export function findMatchPda(
       Buffer.from([round]),
       matchIndexLe,
     ],
-    programId,
+    programId
   );
 }
 
@@ -104,7 +106,7 @@ export function findMatchPda(
 export async function fundFromProvider(
   provider: anchor.AnchorProvider,
   to: PublicKey,
-  lamports: number,
+  lamports: number
 ): Promise<void> {
   await withBlockhashRetry(async () => {
     const ix = SystemProgram.transfer({
@@ -123,7 +125,7 @@ export async function fundFromProvider(
 export async function withBlockhashRetry<T>(
   build: () => Promise<T>,
   label: string,
-  attempts: number = 8,
+  attempts: number = 8
 ): Promise<T> {
   let lastErr: unknown = null;
   for (let i = 0; i < attempts; i++) {
@@ -139,7 +141,7 @@ export async function withBlockhashRetry<T>(
 }
 
 export async function createUsdcLikeMint(
-  provider: anchor.AnchorProvider,
+  provider: anchor.AnchorProvider
 ): Promise<PublicKey> {
   const payer = (provider.wallet as anchor.Wallet).payer;
   return await createMint(
@@ -147,7 +149,7 @@ export async function createUsdcLikeMint(
     payer,
     provider.wallet.publicKey,
     null,
-    USDC_DECIMALS,
+    USDC_DECIMALS
   );
 }
 
@@ -155,7 +157,7 @@ export async function makeFundedWallet(
   provider: anchor.AnchorProvider,
   mint: PublicKey,
   usdcAmount: BN,
-  solAmount: number = 0.1,
+  solAmount: number = 0.1
 ): Promise<{ keypair: Keypair; ata: PublicKey }> {
   const kp = Keypair.generate();
   await fundFromProvider(provider, kp.publicKey, solAmount * LAMPORTS_PER_SOL);
@@ -165,7 +167,12 @@ export async function makeFundedWallet(
   // local validators: the post-create getAccount() races validator gossip and
   // throws `TokenAccountNotFoundError` even after sendAndConfirm returned. We
   // retry it (and the SOL fund + mint-to) under blockhash-aware backoff.
-  const ataInfo = await getOrCreateAtaWithRetry(provider.connection, payer, mint, kp.publicKey);
+  const ataInfo = await getOrCreateAtaWithRetry(
+    provider.connection,
+    payer,
+    mint,
+    kp.publicKey
+  );
 
   if (!usdcAmount.isZero()) {
     await withBlockhashRetry(
@@ -176,9 +183,9 @@ export async function makeFundedWallet(
           mint,
           ataInfo.address,
           provider.wallet.publicKey,
-          BigInt(usdcAmount.toString()),
+          BigInt(usdcAmount.toString())
         ),
-      "mintTo",
+      "mintTo"
     );
   }
 
@@ -190,7 +197,7 @@ async function getOrCreateAtaWithRetry(
   payer: Keypair,
   mint: PublicKey,
   owner: PublicKey,
-  attempts: number = 8,
+  attempts: number = 8
 ): Promise<TokenAccount> {
   let lastErr: unknown = null;
   for (let i = 0; i < attempts; i++) {
@@ -201,7 +208,7 @@ async function getOrCreateAtaWithRetry(
         mint,
         owner,
         false, // allowOwnerOffCurve
-        "confirmed", // commitment (was mistakenly passed in the allowOwnerOffCurve slot)
+        "confirmed" // commitment (was mistakenly passed in the allowOwnerOffCurve slot)
       );
     } catch (e) {
       lastErr = e;
@@ -214,21 +221,21 @@ async function getOrCreateAtaWithRetry(
 export async function makeAtaOnly(
   provider: anchor.AnchorProvider,
   mint: PublicKey,
-  owner: PublicKey,
+  owner: PublicKey
 ): Promise<PublicKey> {
   const payer = (provider.wallet as anchor.Wallet).payer;
   const ataInfo = await getOrCreateAssociatedTokenAccount(
     provider.connection,
     payer,
     mint,
-    owner,
+    owner
   );
   return ataInfo.address;
 }
 
 export async function tokenBalance(
   conn: Connection,
-  ata: PublicKey,
+  ata: PublicKey
 ): Promise<bigint> {
   const acc: TokenAccount = await getAccount(conn, ata);
   return acc.amount;
@@ -241,7 +248,7 @@ export async function tokenBalance(
 export async function rpcWithRetry(
   build: () => Promise<string>,
   label: string = "rpc",
-  attempts: number = 8,
+  attempts: number = 8
 ): Promise<string> {
   let lastErr: unknown = null;
   for (let i = 0; i < attempts; i++) {
@@ -257,9 +264,11 @@ export async function rpcWithRetry(
 }
 
 function isTransientRpcError(e: any): boolean {
-  const msg = `${e?.message ?? ""} ${JSON.stringify(e?.logs ?? "")} ${String(e)}`;
+  const msg = `${e?.message ?? ""} ${JSON.stringify(e?.logs ?? "")} ${String(
+    e
+  )}`;
   return /blockhash not found|block height exceeded|simulation failed|node is behind|TransactionExpiredBlockheightExceededError/i.test(
-    msg,
+    msg
   );
 }
 
@@ -268,7 +277,7 @@ function isTransientRpcError(e: any): boolean {
 export async function measureCu(
   conn: Connection,
   sig: string,
-  attempts: number = 6,
+  attempts: number = 6
 ): Promise<number> {
   for (let i = 0; i < attempts; i++) {
     const tx = await conn.getTransaction(sig, {
@@ -289,10 +298,16 @@ export async function measureCu(
 export async function ensureProtocolInitialized(
   provider: anchor.AnchorProvider,
   program: Program<BracketChain>,
-  defaultMint: PublicKey,
-): Promise<{ treasury: PublicKey; treasuryAta: PublicKey; protocolConfigPda: PublicKey }> {
+  defaultMint: PublicKey
+): Promise<{
+  treasury: PublicKey;
+  treasuryAta: PublicKey;
+  protocolConfigPda: PublicKey;
+}> {
   const [protocolConfigPda] = findProtocolConfigPda(program.programId);
-  const existing = await program.account.protocolConfig.fetchNullable(protocolConfigPda);
+  const existing = await program.account.protocolConfig.fetchNullable(
+    protocolConfigPda
+  );
   let treasury: PublicKey;
 
   if (existing) {
@@ -334,7 +349,7 @@ export async function ensureProtocolInitialized(
 export function buildBracketDescriptors(
   tournament: PublicKey,
   players: PublicKey[],
-  programId: PublicKey,
+  programId: PublicKey
 ): { descriptors: MatchInitDescriptor[]; matchPdas: PublicKey[] } {
   const N = players.length;
   if (N < 2) throw new Error("need ≥2 players");
@@ -348,7 +363,9 @@ export function buildBracketDescriptors(
   // round R+1 descriptors can pre-populate slots fed by byes.
   const winnerAtInit: PublicKey[][] = [];
   for (let r = 0; r < totalRounds; r++) {
-    winnerAtInit.push(new Array(bracketSize >> (r + 1)).fill(PublicKey.default));
+    winnerAtInit.push(
+      new Array(bracketSize >> (r + 1)).fill(PublicKey.default)
+    );
   }
 
   const descriptors: MatchInitDescriptor[] = [];
@@ -448,7 +465,7 @@ export async function sendStartChunks(
   descriptors: MatchInitDescriptor[],
   matchPdas: PublicKey[],
   chunkSize: number = 7,
-  computeUnits: number = 400_000,
+  computeUnits: number = 400_000
 ): Promise<string[]> {
   const sigs: string[] = [];
   for (let i = 0; i < descriptors.length; i += chunkSize) {
@@ -475,7 +492,7 @@ export async function sendStartChunks(
           ])
           .signers([organizer])
           .rpc(),
-      `start_tournament[chunk ${i / chunkSize}]`,
+      `start_tournament[chunk ${i / chunkSize}]`
     );
     sigs.push(sig);
   }

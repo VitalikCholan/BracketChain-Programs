@@ -1,10 +1,6 @@
 import * as anchor from "@coral-xyz/anchor";
 import { BN, Program } from "@coral-xyz/anchor";
-import {
-  AccountMeta,
-  PublicKey,
-  SystemProgram,
-} from "@solana/web3.js";
+import { AccountMeta, PublicKey, SystemProgram } from "@solana/web3.js";
 import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import { expect } from "chai";
 
@@ -64,15 +60,26 @@ describe("capacity-128p-deep", function () {
     const record = async (label: string, sig: string) => {
       const cu = await measureCu(conn, sig);
       rows.push({ ix: label, cu });
-      expect(cu, `${label} exceeded ${CU_CEILING} CU ceiling`).to.be.lessThan(CU_CEILING);
+      expect(cu, `${label} exceeded ${CU_CEILING} CU ceiling`).to.be.lessThan(
+        CU_CEILING
+      );
     };
 
     // Organizer needs SOL for: tournament rent + vault rent + 127 MatchNode
     // PDAs (~0.00188 SOL each) + chunked-start signatures. 2.0 SOL leaves
     // headroom for fee-payer churn across the full sweep.
-    const organizer = await makeFundedWallet(provider, usdcMint, ORGANIZER_DEPOSIT, 2.0);
+    const organizer = await makeFundedWallet(
+      provider,
+      usdcMint,
+      ORGANIZER_DEPOSIT,
+      2.0
+    );
     const tournamentName = "cap-128-deep";
-    const [tournamentPda] = findTournamentPda(organizer.keypair.publicKey, tournamentName, programId);
+    const [tournamentPda] = findTournamentPda(
+      organizer.keypair.publicKey,
+      tournamentName,
+      programId
+    );
     const [vaultPda] = findVaultPda(tournamentPda, programId);
 
     // ── 1. create_tournament (Deep + deposit) ──────────────────────────────
@@ -89,7 +96,7 @@ describe("capacity-128p-deep", function () {
             ORGANIZER_DEPOSIT,
             { manual: {} }, // game: Manual
             { organizerOnly: {} }, // settlement_mode
-            0, // dispute_window_secs
+            0 // dispute_window_secs
           )
           .accountsPartial({
             organizer: organizer.keypair.publicKey,
@@ -104,16 +111,24 @@ describe("capacity-128p-deep", function () {
           })
           .signers([organizer.keypair])
           .rpc(),
-      "create_tournament",
+      "create_tournament"
     );
     await record("create_tournament (Deep, deposit=10 USDC)", createSig);
 
     // ── 2. join_tournament × 128 — sample CU at first, mid, last ───────────
-    const players: { keypair: anchor.web3.Keypair; ata: PublicKey; participantPda: PublicKey }[] = [];
+    const players: {
+      keypair: anchor.web3.Keypair;
+      ata: PublicKey;
+      participantPda: PublicKey;
+    }[] = [];
     const joinSamples: { idx: number; sig: string }[] = [];
     for (let i = 0; i < 128; i++) {
       const w = await makeFundedWallet(provider, usdcMint, ENTRY_FEE);
-      const [participantPda] = findParticipantPda(tournamentPda, w.keypair.publicKey, programId);
+      const [participantPda] = findParticipantPda(
+        tournamentPda,
+        w.keypair.publicKey,
+        programId
+      );
       const sig = await rpcWithRetry(
         () =>
           program.methods
@@ -131,16 +146,21 @@ describe("capacity-128p-deep", function () {
             })
             .signers([w.keypair])
             .rpc(),
-        `join_tournament[${i}]`,
+        `join_tournament[${i}]`
       );
       players.push({ keypair: w.keypair, ata: w.ata, participantPda });
       if (i === 0 || i === 63 || i === 127) joinSamples.push({ idx: i, sig });
     }
-    for (const s of joinSamples) await record(`join_tournament (player ${s.idx})`, s.sig);
+    for (const s of joinSamples)
+      await record(`join_tournament (player ${s.idx})`, s.sig);
 
     // ── 3. start_tournament — chunked. Sample first/mid/last chunk. ────────
     const playerKeys = players.map((p) => p.keypair.publicKey);
-    const { descriptors, matchPdas } = buildBracketDescriptors(tournamentPda, playerKeys, programId);
+    const { descriptors, matchPdas } = buildBracketDescriptors(
+      tournamentPda,
+      playerKeys,
+      programId
+    );
     expect(descriptors.length).to.equal(127);
 
     const chunkSigs = await sendStartChunks(
@@ -150,18 +170,21 @@ describe("capacity-128p-deep", function () {
       descriptors,
       matchPdas,
       7,
-      1_400_000,
+      1_400_000
     );
     expect(chunkSigs.length).to.be.greaterThan(1);
-    await record(`start_tournament (chunk 0/${chunkSigs.length})`, chunkSigs[0]);
+    await record(
+      `start_tournament (chunk 0/${chunkSigs.length})`,
+      chunkSigs[0]
+    );
     const midChunkIdx = Math.floor(chunkSigs.length / 2);
     await record(
       `start_tournament (chunk ${midChunkIdx}/${chunkSigs.length})`,
-      chunkSigs[midChunkIdx],
+      chunkSigs[midChunkIdx]
     );
     await record(
       `start_tournament (chunk ${chunkSigs.length - 1}/${chunkSigs.length})`,
-      chunkSigs[chunkSigs.length - 1],
+      chunkSigs[chunkSigs.length - 1]
     );
 
     // ── 4. report_result × 127 (126 non-final + 1 final) ───────────────────
@@ -188,7 +211,12 @@ describe("capacity-128p-deep", function () {
       const matchCount = 1 << (6 - r);
       for (let m = 0; m < matchCount; m++) {
         const [matchPda] = findMatchPda(tournamentPda, r, m, programId);
-        const [nextMatchPda] = findMatchPda(tournamentPda, r + 1, Math.floor(m / 2), programId);
+        const [nextMatchPda] = findMatchPda(
+          tournamentPda,
+          r + 1,
+          Math.floor(m / 2),
+          programId
+        );
         const winner = winnerAtNode[r][m];
         const sig = await rpcWithRetry(
           () =>
@@ -206,7 +234,7 @@ describe("capacity-128p-deep", function () {
               })
               .signers([organizer.keypair])
               .rpc(),
-          `report_result[r${r},m${m}]`,
+          `report_result[r${r},m${m}]`
         );
         if (reportSampleRounds.has(r) && m === 0) {
           reportSamples.push({ round: r, sig });
@@ -214,7 +242,10 @@ describe("capacity-128p-deep", function () {
       }
     }
     for (const s of reportSamples) {
-      await record(`report_result non-final (round ${s.round}, match 0)`, s.sig);
+      await record(
+        `report_result non-final (round ${s.round}, match 0)`,
+        s.sig
+      );
     }
 
     // ── 5. report_result final (Deep, 7 placement payouts + treasury) ─────
@@ -233,7 +264,11 @@ describe("capacity-128p-deep", function () {
 
     const [finalMatchPda] = findMatchPda(tournamentPda, 6, 0, programId);
     const remaining: AccountMeta[] = [
-      ...placementAtas.map((pubkey) => ({ pubkey, isSigner: false, isWritable: true })),
+      ...placementAtas.map((pubkey) => ({
+        pubkey,
+        isSigner: false,
+        isWritable: true,
+      })),
       { pubkey: treasuryAta, isSigner: false, isWritable: true },
     ];
 
@@ -242,7 +277,7 @@ describe("capacity-128p-deep", function () {
     const vaultBeforeFinal = await tokenBalance(conn, vaultPda);
     // Vault carries 128 entry fees + organizer deposit immediately before final.
     expect(vaultBeforeFinal).to.equal(
-      128n * BigInt(ENTRY_FEE.toString()) + BigInt(ORGANIZER_DEPOSIT.toString()),
+      128n * BigInt(ENTRY_FEE.toString()) + BigInt(ORGANIZER_DEPOSIT.toString())
     );
 
     const finalSig = await rpcWithRetry(
@@ -262,7 +297,7 @@ describe("capacity-128p-deep", function () {
           .remainingAccounts(remaining)
           .signers([organizer.keypair])
           .rpc(),
-      "report_result_FINAL",
+      "report_result_FINAL"
     );
     await record("report_result FINAL (Deep, 128p, +deposit refund)", finalSig);
 
@@ -276,7 +311,9 @@ describe("capacity-128p-deep", function () {
     const treasuryAfter = await tokenBalance(conn, treasuryAta);
     const organizerAfter = await tokenBalance(conn, organizer.ata);
     expect(treasuryAfter - treasuryBefore).to.equal(feeExpected);
-    expect(organizerAfter - organizerBeforeFinal).to.equal(BigInt(ORGANIZER_DEPOSIT.toString()));
+    expect(organizerAfter - organizerBeforeFinal).to.equal(
+      BigInt(ORGANIZER_DEPOSIT.toString())
+    );
 
     expect(await tokenBalance(conn, players[0].ata)).to.equal(payouts[0]);
     // 7th place is the smallest, exercise the tail of the loop.
@@ -312,18 +349,41 @@ describe("capacity-128p-deep", function () {
     const protocolConfigPda = init.protocolConfigPda;
     const rows: CuRow[] = [];
 
-    async function runFinal(preset: "wta" | "standard", name: string): Promise<void> {
+    async function runFinal(
+      preset: "wta" | "standard",
+      name: string
+    ): Promise<void> {
       const placementCount = preset === "wta" ? 1 : 3;
-      const organizer = await makeFundedWallet(provider, usdcMint, new BN(0), 0.2);
-      const [tournamentPda] = findTournamentPda(organizer.keypair.publicKey, name, programId);
+      const organizer = await makeFundedWallet(
+        provider,
+        usdcMint,
+        new BN(0),
+        0.2
+      );
+      const [tournamentPda] = findTournamentPda(
+        organizer.keypair.publicKey,
+        name,
+        programId
+      );
       const [vaultPda] = findVaultPda(tournamentPda, programId);
       const deadline = new BN(Math.floor(Date.now() / 1000) + 3600);
-      const presetArg: any = preset === "wta" ? { winnerTakesAll: {} } : { standard: {} };
+      const presetArg: any =
+        preset === "wta" ? { winnerTakesAll: {} } : { standard: {} };
 
       await rpcWithRetry(
         () =>
           program.methods
-            .createTournament(name, ENTRY_FEE, 8, presetArg, deadline, new BN(0), { manual: {} }, { organizerOnly: {} }, 0)
+            .createTournament(
+              name,
+              ENTRY_FEE,
+              8,
+              presetArg,
+              deadline,
+              new BN(0),
+              { manual: {} },
+              { organizerOnly: {} },
+              0
+            )
             .accountsPartial({
               organizer: organizer.keypair.publicKey,
               protocolConfig: protocolConfigPda,
@@ -337,14 +397,18 @@ describe("capacity-128p-deep", function () {
             })
             .signers([organizer.keypair])
             .rpc(),
-        `create_${preset}`,
+        `create_${preset}`
       );
 
       const playersPk: PublicKey[] = [];
       const playerAtas: PublicKey[] = [];
       for (let i = 0; i < 8; i++) {
         const w = await makeFundedWallet(provider, usdcMint, ENTRY_FEE);
-        const [participantPda] = findParticipantPda(tournamentPda, w.keypair.publicKey, programId);
+        const [participantPda] = findParticipantPda(
+          tournamentPda,
+          w.keypair.publicKey,
+          programId
+        );
         await rpcWithRetry(
           () =>
             program.methods
@@ -362,21 +426,36 @@ describe("capacity-128p-deep", function () {
               })
               .signers([w.keypair])
               .rpc(),
-          `join_${preset}_${i}`,
+          `join_${preset}_${i}`
         );
         playersPk.push(w.keypair.publicKey);
         playerAtas.push(w.ata);
       }
 
-      const { descriptors, matchPdas } = buildBracketDescriptors(tournamentPda, playersPk, programId);
-      await sendStartChunks(program, organizer.keypair, tournamentPda, descriptors, matchPdas);
+      const { descriptors, matchPdas } = buildBracketDescriptors(
+        tournamentPda,
+        playersPk,
+        programId
+      );
+      await sendStartChunks(
+        program,
+        organizer.keypair,
+        tournamentPda,
+        descriptors,
+        matchPdas
+      );
 
       // Left seed always wins.
       for (let r = 0; r < 2; r++) {
         const matchCount = 1 << (2 - r);
         for (let m = 0; m < matchCount; m++) {
           const [matchPda] = findMatchPda(tournamentPda, r, m, programId);
-          const [nextPda] = findMatchPda(tournamentPda, r + 1, Math.floor(m / 2), programId);
+          const [nextPda] = findMatchPda(
+            tournamentPda,
+            r + 1,
+            Math.floor(m / 2),
+            programId
+          );
           // Winner of R0 m = playerKeys[2m]; R1 m = playerKeys[4m].
           const winner = playersPk[r === 0 ? 2 * m : 4 * m];
           await rpcWithRetry(
@@ -395,7 +474,7 @@ describe("capacity-128p-deep", function () {
                 })
                 .signers([organizer.keypair])
                 .rpc(),
-            `report_${preset}_r${r}_m${m}`,
+            `report_${preset}_r${r}_m${m}`
           );
         }
       }
@@ -411,7 +490,11 @@ describe("capacity-128p-deep", function () {
           ? [playerAtas[0]]
           : [playerAtas[0], playerAtas[4], playerAtas[2]];
       const remaining: AccountMeta[] = [
-        ...placementAtaArr.map((pubkey) => ({ pubkey, isSigner: false, isWritable: true })),
+        ...placementAtaArr.map((pubkey) => ({
+          pubkey,
+          isSigner: false,
+          isWritable: true,
+        })),
         { pubkey: treasuryAta, isSigner: false, isWritable: true },
       ];
       const [finalPda] = findMatchPda(tournamentPda, 2, 0, programId);
@@ -432,10 +515,15 @@ describe("capacity-128p-deep", function () {
             .remainingAccounts(remaining)
             .signers([organizer.keypair])
             .rpc(),
-        `final_${preset}`,
+        `final_${preset}`
       );
       const cu = await measureCu(conn, sig);
-      rows.push({ ix: `report_result FINAL (${preset === "wta" ? "WTA" : "Standard"}, 8p, ${placementCount}+1 placement_atas)`, cu });
+      rows.push({
+        ix: `report_result FINAL (${
+          preset === "wta" ? "WTA" : "Standard"
+        }, 8p, ${placementCount}+1 placement_atas)`,
+        cu,
+      });
       expect(cu).to.be.lessThan(CU_CEILING);
     }
 

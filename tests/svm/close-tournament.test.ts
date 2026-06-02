@@ -26,9 +26,11 @@ import { BracketChain } from "../../target/types/bracket_chain";
 // acceptance run on a real validator (needs a funded SPL vault round-trip);
 // here we cover `close_root = false`, which is the bulk of the reclaimed rent.
 
-const PROGRAM_ID = new PublicKey("3YpkUKBh8288XN2dCKSwBnEdyc5UozSJ19A1ZCLpUZsZ");
+const PROGRAM_ID = new PublicKey(
+  "3YpkUKBh8288XN2dCKSwBnEdyc5UozSJ19A1ZCLpUZsZ"
+);
 const TOKEN_PROGRAM = new PublicKey(
-  "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+  "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
 );
 
 const ERR_UNAUTHORIZED = 6000;
@@ -40,16 +42,19 @@ const program = new Program<BracketChain>(idl as any, stubProvider);
 const coder = program.coder;
 
 // ── PDAs ──────────────────────────────────────────────────────────────────
-function tournamentPda(organizer: PublicKey, name: string): [PublicKey, number] {
+function tournamentPda(
+  organizer: PublicKey,
+  name: string
+): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
     [Buffer.from("tournament"), organizer.toBuffer(), Buffer.from(name)],
-    PROGRAM_ID,
+    PROGRAM_ID
   );
 }
 function vaultPda(tournament: PublicKey): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
     [Buffer.from("vault"), tournament.toBuffer()],
-    PROGRAM_ID,
+    PROGRAM_ID
   );
 }
 
@@ -102,7 +107,7 @@ function bootSvm(): LiteSvm {
   svm.setSysvars();
   svm.addProgramFromFile(
     PROGRAM_ID.toBytes(),
-    path.join(__dirname, "..", "..", "target", "deploy", "bracket_chain.so"),
+    path.join(__dirname, "..", "..", "target", "deploy", "bracket_chain.so")
   );
   return svm;
 }
@@ -112,7 +117,7 @@ async function writeTournament(svm: LiteSvm, pubkey: PublicKey, obj: any) {
   const lamports = svm.minimumBalanceForRentExemption(BigInt(data.length));
   svm.setAccount(
     pubkey.toBytes(),
-    new LiteAccount(lamports, data, PROGRAM_ID.toBytes(), false, 0n),
+    new LiteAccount(lamports, data, PROGRAM_ID.toBytes(), false, 0n)
   );
 }
 
@@ -122,7 +127,7 @@ function writeTokenAccount(
   pubkey: PublicKey,
   mint: PublicKey,
   owner: PublicKey,
-  amount: bigint,
+  amount: bigint
 ) {
   const buf = Buffer.alloc(165);
   mint.toBuffer().copy(buf, 0);
@@ -132,7 +137,7 @@ function writeTokenAccount(
   const lamports = svm.minimumBalanceForRentExemption(165n);
   svm.setAccount(
     pubkey.toBytes(),
-    new LiteAccount(lamports, buf, TOKEN_PROGRAM.toBytes(), false, 0n),
+    new LiteAccount(lamports, buf, TOKEN_PROGRAM.toBytes(), false, 0n)
   );
 }
 
@@ -145,7 +150,7 @@ function writeChild(svm: LiteSvm, pubkey: PublicKey, tournament: PublicKey) {
   const lamports = svm.minimumBalanceForRentExemption(120n);
   svm.setAccount(
     pubkey.toBytes(),
-    new LiteAccount(lamports, buf, PROGRAM_ID.toBytes(), false, 0n),
+    new LiteAccount(lamports, buf, PROGRAM_ID.toBytes(), false, 0n)
   );
 }
 
@@ -153,7 +158,11 @@ function buildIx(args: any, keys: AccountMeta[]): TransactionInstruction {
   const data = coder.instruction.encode("closeTournament", args);
   return new TransactionInstruction({ programId: PROGRAM_ID, keys, data });
 }
-function meta(pubkey: PublicKey, isSigner: boolean, isWritable: boolean): AccountMeta {
+function meta(
+  pubkey: PublicKey,
+  isSigner: boolean,
+  isWritable: boolean
+): AccountMeta {
   return { pubkey, isSigner, isWritable };
 }
 function sendTx(svm: LiteSvm, ix: TransactionInstruction, payer: Keypair) {
@@ -179,7 +188,9 @@ function expectCustomErr(res: any, code: number) {
 }
 function expectOk(res: any) {
   if (res instanceof FailedTransactionMetadata) {
-    throw new Error(`expected success, got failure:\n${res.meta().logs().join("\n")}`);
+    throw new Error(
+      `expected success, got failure:\n${res.meta().logs().join("\n")}`
+    );
   }
 }
 
@@ -205,7 +216,7 @@ async function setup(status: any): Promise<Fixture> {
   await writeTournament(
     svm,
     tournament,
-    makeTournament({ organizer, name, vault, bump, vaultBump, status }),
+    makeTournament({ organizer, name, vault, bump, vaultBump, status })
   );
   writeTokenAccount(svm, vault, PublicKey.default, tournament, 0n);
 
@@ -231,7 +242,7 @@ describe("close_tournament (LiteSVM)", function () {
     const res = sendTx(
       fx.svm,
       buildIx({ closeRoot: false }, baseKeys(fx, [child])),
-      fx.caller,
+      fx.caller
     );
     expectCustomErr(res, ERR_TOURNAMENT_IN_PROGRESS);
   });
@@ -250,7 +261,7 @@ describe("close_tournament (LiteSVM)", function () {
     const res = sendTx(
       fx.svm,
       buildIx({ closeRoot: false }, baseKeys(fx, [a, b])),
-      fx.caller,
+      fx.caller
     );
     expectOk(res);
 
@@ -267,11 +278,23 @@ describe("close_tournament (LiteSVM)", function () {
     const a = new Keypair().publicKey;
     writeChild(fx.svm, a, fx.tournament);
 
-    expectOk(sendTx(fx.svm, buildIx({ closeRoot: false }, baseKeys(fx, [a])), fx.caller));
+    expectOk(
+      sendTx(
+        fx.svm,
+        buildIx({ closeRoot: false }, baseKeys(fx, [a])),
+        fx.caller
+      )
+    );
     // New blockhash so the re-send isn't rejected as a duplicate signature.
     fx.svm.expireBlockhash();
     // Second pass: `a` already has 0 lamports → skipped, still succeeds.
-    expectOk(sendTx(fx.svm, buildIx({ closeRoot: false }, baseKeys(fx, [a])), fx.caller));
+    expectOk(
+      sendTx(
+        fx.svm,
+        buildIx({ closeRoot: false }, baseKeys(fx, [a])),
+        fx.caller
+      )
+    );
   });
 
   it("rejects a child belonging to a different tournament", async () => {
@@ -281,7 +304,7 @@ describe("close_tournament (LiteSVM)", function () {
     const res = sendTx(
       fx.svm,
       buildIx({ closeRoot: false }, baseKeys(fx, [stranger])),
-      fx.caller,
+      fx.caller
     );
     expectCustomErr(res, ERR_INVALID_MATCH_INDEX);
   });

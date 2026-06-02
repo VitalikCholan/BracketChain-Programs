@@ -28,9 +28,11 @@ import { BracketChain } from "../../target/types/bracket_chain";
 // `BorshCoder` (no `initialize_protocol` / `create_tournament` ceremony) so each
 // test isolates exactly one branch.
 
-const PROGRAM_ID = new PublicKey("3YpkUKBh8288XN2dCKSwBnEdyc5UozSJ19A1ZCLpUZsZ");
+const PROGRAM_ID = new PublicKey(
+  "3YpkUKBh8288XN2dCKSwBnEdyc5UozSJ19A1ZCLpUZsZ"
+);
 const SWITCHBOARD_OD_DEVNET = new PublicKey(
-  "Aio4gaXjXzJNVLtzwtNVmSqGKpANtXhybbkhtAC94ji2",
+  "Aio4gaXjXzJNVLtzwtNVmSqGKpANtXhybbkhtAC94ji2"
 );
 
 // PullFeedAccountData layout, measured against the live switchboard-on-demand
@@ -64,20 +66,23 @@ const coder = program.coder;
 function protocolConfigPda(): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
     [Buffer.from("protocol_config")],
-    PROGRAM_ID,
+    PROGRAM_ID
   );
 }
-function tournamentPda(organizer: PublicKey, name: string): [PublicKey, number] {
+function tournamentPda(
+  organizer: PublicKey,
+  name: string
+): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
     [Buffer.from("tournament"), organizer.toBuffer(), Buffer.from(name)],
-    PROGRAM_ID,
+    PROGRAM_ID
   );
 }
 function matchPda(
   tournament: PublicKey,
   bracket: number,
   round: number,
-  matchIndex: number,
+  matchIndex: number
 ): [PublicKey, number] {
   const mi = Buffer.alloc(2);
   mi.writeUInt16LE(matchIndex, 0);
@@ -89,7 +94,7 @@ function matchPda(
       Buffer.from([round]),
       mi,
     ],
-    PROGRAM_ID,
+    PROGRAM_ID
   );
 }
 
@@ -219,7 +224,7 @@ function bootSvm(): LiteSvm {
     "..",
     "target",
     "deploy",
-    "bracket_chain.so",
+    "bracket_chain.so"
   );
   svm.addProgramFromFile(PROGRAM_ID.toBytes(), soPath);
   return svm;
@@ -229,13 +234,13 @@ async function writeAnchorAccount(
   svm: LiteSvm,
   pubkey: PublicKey,
   name: "tournament" | "matchNode" | "protocolConfig",
-  obj: any,
+  obj: any
 ) {
   const data = await coder.accounts.encode(name, obj);
   const lamports = svm.minimumBalanceForRentExemption(BigInt(data.length));
   svm.setAccount(
     pubkey.toBytes(),
-    new LiteAccount(lamports, data, PROGRAM_ID.toBytes(), false, 0n),
+    new LiteAccount(lamports, data, PROGRAM_ID.toBytes(), false, 0n)
   );
 }
 
@@ -246,7 +251,7 @@ function writePullFeed(
   feedHash: Uint8Array,
   valueI128: bigint,
   landedAtSlot: bigint,
-  nSamples: number,
+  nSamples: number
 ) {
   const buf = Buffer.alloc(8 + PULLFEED_DATA_LEN);
   PULLFEED_DISC.copy(buf, 0);
@@ -263,13 +268,7 @@ function writePullFeed(
   const lamports = svm.minimumBalanceForRentExemption(BigInt(buf.length));
   svm.setAccount(
     pubkey.toBytes(),
-    new LiteAccount(
-      lamports,
-      buf,
-      SWITCHBOARD_OD_DEVNET.toBytes(),
-      false,
-      0n,
-    ),
+    new LiteAccount(lamports, buf, SWITCHBOARD_OD_DEVNET.toBytes(), false, 0n)
   );
 }
 
@@ -284,7 +283,13 @@ function writeI128LE(buf: Buffer, offset: number, value: bigint) {
 function setSlot(svm: LiteSvm, slot: bigint, unixTs: bigint) {
   const c = svm.getClock();
   svm.setClock(
-    new Clock(slot, c.epochStartTimestamp, c.epoch, c.leaderScheduleEpoch, unixTs),
+    new Clock(
+      slot,
+      c.epochStartTimestamp,
+      c.epoch,
+      c.leaderScheduleEpoch,
+      unixTs
+    )
   );
 }
 
@@ -295,12 +300,20 @@ function randomBytes(n: number): Uint8Array {
 }
 
 // ── Instruction + tx ────────────────────────────────────────────────────────
-function buildIx(name: string, args: any, keys: AccountMeta[]): TransactionInstruction {
+function buildIx(
+  name: string,
+  args: any,
+  keys: AccountMeta[]
+): TransactionInstruction {
   const data = coder.instruction.encode(name, args);
   return new TransactionInstruction({ programId: PROGRAM_ID, keys, data });
 }
 
-function meta(pubkey: PublicKey, isSigner: boolean, isWritable: boolean): AccountMeta {
+function meta(
+  pubkey: PublicKey,
+  isSigner: boolean,
+  isWritable: boolean
+): AccountMeta {
   return { pubkey, isSigner, isWritable };
 }
 
@@ -308,7 +321,7 @@ function sendTx(
   svm: LiteSvm,
   ix: TransactionInstruction,
   payer: Keypair,
-  extraSigners: Keypair[] = [],
+  extraSigners: Keypair[] = []
 ) {
   const tx = new Transaction().add(ix);
   tx.recentBlockhash = svm.latestBlockhash();
@@ -329,13 +342,19 @@ function expectCustomErr(res: any, code: number) {
   if (!(inner instanceof InstructionErrorCustom)) {
     throw new Error(`expected Custom, got: ${inner.toString()}`);
   }
-  expect(inner.code).to.equal(code, `wrong custom code (logs:\n${res.meta().logs().join("\n")})`);
+  expect(inner.code).to.equal(
+    code,
+    `wrong custom code (logs:\n${res.meta().logs().join("\n")})`
+  );
 }
 
 function expectOk(res: any) {
   if (res instanceof FailedTransactionMetadata) {
     throw new Error(
-      `tx failed: ${res.err().toString()}\nlogs:\n${res.meta().logs().join("\n")}`,
+      `tx failed: ${res.err().toString()}\nlogs:\n${res
+        .meta()
+        .logs()
+        .join("\n")}`
     );
   }
 }
@@ -360,7 +379,7 @@ async function setupOracleFixture(
   over: Partial<{
     proposalSource: any;
     expectedFeedHash: Uint8Array;
-  }> = {},
+  }> = {}
 ): Promise<Fixture> {
   const svm = bootSvm();
 
@@ -387,7 +406,7 @@ async function setupOracleFixture(
       defaultMint: PublicKey.default,
       bump: pcBump,
       switchboardQueue,
-    }),
+    })
   );
 
   // Tournament name short enough that Tournament fits in BorshCoder's 1000-byte
@@ -407,7 +426,7 @@ async function setupOracleFixture(
       arbitrator: organizer.publicKey,
       settlementMode: { oracle: {} },
       disputeWindowSecs: 60,
-    }),
+    })
   );
 
   const [matchAcc, mBump] = matchPda(tournament, 0, 0, 0);
@@ -434,7 +453,7 @@ async function setupOracleFixture(
       proposalSource: over.proposalSource,
       proposer: over.proposalSource ? relayer.publicKey : undefined,
       proposedWinner: over.proposalSource ? playerA.publicKey : undefined,
-    }),
+    })
   );
 
   return {
@@ -468,7 +487,7 @@ describe("oracle settlement (LiteSVM)", function () {
       fx.expectedFeedHash,
       1n * SB_SCALE,
       100n,
-      5,
+      5
     );
 
     const ix = buildIx("proposeResultOracle", {}, [
@@ -482,10 +501,17 @@ describe("oracle settlement (LiteSVM)", function () {
     expectOk(res);
 
     const acc = fx.svm.getAccount(fx.matchAcc.toBytes())!;
-    const decoded: any = coder.accounts.decode("matchNode", Buffer.from(acc.data()));
+    const decoded: any = coder.accounts.decode(
+      "matchNode",
+      Buffer.from(acc.data())
+    );
     expect(decoded.proposalSource).to.deep.equal({ oracle: {} });
-    expect(decoded.proposedWinner.toBase58()).to.equal(fx.playerB.publicKey.toBase58());
-    expect(decoded.proposer.toBase58()).to.equal(fx.relayer.publicKey.toBase58());
+    expect(decoded.proposedWinner.toBase58()).to.equal(
+      fx.playerB.publicKey.toBase58()
+    );
+    expect(decoded.proposer.toBase58()).to.equal(
+      fx.relayer.publicKey.toBase58()
+    );
   });
 
   it("propose_result_oracle: wrong feed key → WrongFeedAccount", async () => {
@@ -530,7 +556,7 @@ describe("oracle settlement (LiteSVM)", function () {
       wrongHash,
       1n * SB_SCALE,
       100n,
-      5,
+      5
     );
 
     const ix = buildIx("bindMatchFeed", {}, [
@@ -555,7 +581,10 @@ describe("oracle settlement (LiteSVM)", function () {
       const res = sendTx(fx.svm, ix, fx.playerA);
       expectOk(res);
       const acc = fx.svm.getAccount(fx.matchAcc.toBytes())!;
-      const decoded: any = coder.accounts.decode("matchNode", Buffer.from(acc.data()));
+      const decoded: any = coder.accounts.decode(
+        "matchNode",
+        Buffer.from(acc.data())
+      );
       expect(decoded.disputed).to.equal(true);
     });
 
