@@ -8,7 +8,7 @@ import {
 import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import { expect } from "chai";
 
-import { BracketChain } from "../target/types/bracket_chain";
+import { BracketChain } from "../../target/types/bracket_chain";
 import {
   ENTRY_FEE,
   buildBracketDescriptors,

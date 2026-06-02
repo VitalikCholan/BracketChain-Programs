@@ -16,10 +16,9 @@ cluster = "devnet"
 wallet = "~/.config/solana/id.json"
 
 [scripts]
-# `anchor test` boots solana-test-validator, so it runs only the validator-dependent
-# (e2e) suites. The 3 LiteSVM suites are hermetic and run via `yarn test:svm` (no validator).
-# TODO(test-arch steps 2-5): replace the explicit list with "tests/e2e/**/*.ts" after the
-# tests/{svm,e2e,contract} migration (see BracketChainDocs/analyze/2026-06-01-test-architecture.md).
-test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/bracket-chain.ts tests/capacity-128p-deep.test.ts tests/player-reported.test.ts tests/settle-final-litesvm.test.ts"
+# `anchor test` boots solana-test-validator and runs ONLY the validator-dependent
+# (e2e) suites in tests/e2e/. The hermetic LiteSVM suites (tests/svm/) run without a
+# validator via `yarn test:svm`; Rust units via `yarn test:unit`.
+test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 \"tests/e2e/**/*.test.ts\""
 
 [hooks]

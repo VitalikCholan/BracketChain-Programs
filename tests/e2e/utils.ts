@@ -20,7 +20,7 @@ import {
   getAccount,
   Account as TokenAccount,
 } from "@solana/spl-token";
-import { BracketChain } from "../target/types/bracket_chain";
+import { BracketChain } from "../../target/types/bracket_chain";
 
 export const USDC_DECIMALS = 6;
 export const ENTRY_FEE = new BN(1_000_000); // 1 USDC
