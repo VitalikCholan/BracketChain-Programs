@@ -179,6 +179,7 @@ Emitted via Anchor `emit!()`. Indexer + SDK consume these via `BorshCoder` over 
 | `MatchFeedBound` | `bind_match_feed` |
 | `TournamentPartiallyCancelled` | `partial_cancel_tournament` |
 | `TournamentClosed` | `close_tournament` |
+| `FinalSettled` | `settle_final` |
 
 `TournamentCompleted.placement_payouts` is a `Vec<PlacementPayout { recipient, amount, place }>` carried in the payload (avoids a transaction-log scan for payout rows).
 
