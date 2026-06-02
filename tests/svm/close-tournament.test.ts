@@ -16,8 +16,8 @@ import {
 import { expect } from "chai";
 import * as path from "path";
 
-import idl from "../target/idl/bracket_chain.json";
-import { BracketChain } from "../target/types/bracket_chain";
+import idl from "../../target/idl/bracket_chain.json";
+import { BracketChain } from "../../target/types/bracket_chain";
 
 // Stage D (D-3) — `close_tournament` LiteSVM tier. Exercises the permissionless
 // rent-reclaim instruction surface: the terminal-status gate, the child-PDA
@@ -102,7 +102,7 @@ function bootSvm(): LiteSvm {
   svm.setSysvars();
   svm.addProgramFromFile(
     PROGRAM_ID.toBytes(),
-    path.join(__dirname, "..", "target", "deploy", "bracket_chain.so"),
+    path.join(__dirname, "..", "..", "target", "deploy", "bracket_chain.so"),
   );
   return svm;
 }

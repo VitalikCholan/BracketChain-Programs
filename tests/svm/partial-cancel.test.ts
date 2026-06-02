@@ -16,8 +16,8 @@ import {
 import { expect } from "chai";
 import * as path from "path";
 
-import idl from "../target/idl/bracket_chain.json";
-import { BracketChain } from "../target/types/bracket_chain";
+import idl from "../../target/idl/bracket_chain.json";
+import { BracketChain } from "../../target/types/bracket_chain";
 
 // Stage E (E-2/E-3) — partial-cancel LiteSVM tier. Covers the instruction
 // surface without a token CPI: `partial_cancel_tournament` status transitions
@@ -130,7 +130,7 @@ function bootSvm(): LiteSvm {
   svm.setSysvars();
   svm.addProgramFromFile(
     PROGRAM_ID.toBytes(),
-    path.join(__dirname, "..", "target", "deploy", "bracket_chain.so"),
+    path.join(__dirname, "..", "..", "target", "deploy", "bracket_chain.so"),
   );
   return svm;
 }

@@ -17,8 +17,8 @@ import {
 import { expect } from "chai";
 import * as path from "path";
 
-import idl from "../target/idl/bracket_chain.json";
-import { BracketChain } from "../target/types/bracket_chain";
+import idl from "../../target/idl/bracket_chain.json";
+import { BracketChain } from "../../target/types/bracket_chain";
 
 // Stage C / V1.2 oracle settlement, LiteSVM tier (companion to the Rust-unit
 // layer in `propose_result_oracle.rs::tests`). LiteSVM gives us the SBF runtime
@@ -215,6 +215,7 @@ function bootSvm(): LiteSvm {
   svm.setSysvars();
   const soPath = path.join(
     __dirname,
+    "..",
     "..",
     "target",
     "deploy",
