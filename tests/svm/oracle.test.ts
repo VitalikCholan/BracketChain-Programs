@@ -29,7 +29,7 @@ import { BracketChain } from "../../target/types/bracket_chain";
 // test isolates exactly one branch.
 
 const PROGRAM_ID = new PublicKey(
-  "3YpkUKBh8288XN2dCKSwBnEdyc5UozSJ19A1ZCLpUZsZ"
+  (idl as any).address
 );
 const SWITCHBOARD_OD_DEVNET = new PublicKey(
   "Aio4gaXjXzJNVLtzwtNVmSqGKpANtXhybbkhtAC94ji2"

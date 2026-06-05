@@ -13,16 +13,17 @@ use crate::constants::{
     BPS_DENOMINATOR, EVENT_VERSION_V1, PROTOCOL_FEE_BPS, TOURNAMENT_SEED,
 };
 use crate::errors::BracketChainError;
-use crate::events::{MatchReported, PlacementPayout, RefundIssued, TournamentCompleted};
+use crate::events::{MatchReported, PlacementPayout, TournamentCompleted};
 use crate::state::{
     MatchNode, MatchStatus, Participant, ProtocolConfig, Tournament, TournamentStatus,
 };
 
 /// Marks `match_account` completed for `winner`, emits `MatchReported`, then
 /// either advances the winner into the parent slot or — on the final match —
-/// refunds the organizer deposit, distributes the prize pool, and completes the
-/// tournament. Validation common to every settlement path (tournament Active,
-/// match Active, winner ∈ {player_a, player_b}) is performed here.
+/// distributes the prize pool (Variant B: the organizer deposit stays in the
+/// vault and is part of the basis) and completes the tournament. Validation
+/// common to every settlement path (tournament Active, match Active,
+/// winner ∈ {player_a, player_b}) is performed here.
 ///
 /// `placements` + `remaining_accounts` are only consulted on the final match
 /// (same contract as `report_result`); pass empty / `&[]` otherwise.
@@ -32,7 +33,6 @@ pub fn finalize_match<'info>(
     match_account: &mut Account<'info, MatchNode>,
     next_match: &mut Option<Account<'info, MatchNode>>,
     vault: &mut Account<'info, TokenAccount>,
-    organizer_token_account: &Option<Account<'info, TokenAccount>>,
     protocol_config: &ProtocolConfig,
     token_program: &Program<'info, Token>,
     remaining_accounts: &[AccountInfo<'info>],
@@ -106,11 +106,11 @@ pub fn finalize_match<'info>(
             BracketChainError::InvalidMatchIndex
         );
 
-        // Variant A: refund the organizer's deposit before computing the
-        // prize-pool basis. Invariantly not-yet-refunded here (cancel is gated
-        // pre-start; final-match requires Active).
-        refund_organizer_deposit(tournament, vault, organizer_token_account, token_program)?;
-
+        // Variant B (R13, ratified 2026-06-05): the organizer deposit STAYS in
+        // the vault and is distributed as part of the prize pool —
+        // `gross_pool = vault.amount` includes it, and the protocol fee
+        // applies to it. The deposit is only ever refunded on the cancel
+        // paths (`cancel_tournament` / `partial_refund_chunk`).
         let (gross_pool, fee_amount, net_pool, placement_payouts) = distribute_prizes(
             tournament,
             protocol_config,
@@ -165,58 +165,6 @@ pub fn credit_match_stats<'info>(
     };
     win_p.wins = win_p.wins.saturating_add(1);
     lose_p.losses = lose_p.losses.saturating_add(1);
-    Ok(())
-}
-
-fn refund_organizer_deposit<'info>(
-    tournament: &mut Account<'info, Tournament>,
-    vault: &mut Account<'info, TokenAccount>,
-    organizer_token_account: &Option<Account<'info, TokenAccount>>,
-    token_program: &Program<'info, Token>,
-) -> Result<()> {
-    let organizer_deposit = tournament.organizer_deposit;
-    if organizer_deposit == 0 || tournament.organizer_deposit_refunded {
-        return Ok(());
-    }
-
-    let organizer_ata = organizer_token_account
-        .as_ref()
-        .ok_or(error!(BracketChainError::InvalidVault))?;
-
-    let tournament_key = tournament.key();
-    let organizer_key = tournament.organizer;
-    let tournament_name = tournament.name.clone();
-    let bump_slice = [tournament.bump];
-    let signer_seeds: &[&[&[u8]]] = &[&[
-        TOURNAMENT_SEED,
-        organizer_key.as_ref(),
-        tournament_name.as_bytes(),
-        &bump_slice,
-    ]];
-
-    token::transfer(
-        CpiContext::new_with_signer(
-            token_program.to_account_info(),
-            Transfer {
-                from: vault.to_account_info(),
-                to: organizer_ata.to_account_info(),
-                authority: tournament.to_account_info(),
-            },
-            signer_seeds,
-        ),
-        organizer_deposit,
-    )?;
-
-    tournament.organizer_deposit_refunded = true;
-    vault.reload()?;
-
-    emit!(RefundIssued {
-        event_version: EVENT_VERSION_V1,
-        tournament: tournament_key,
-        wallet: organizer_key,
-        amount: organizer_deposit,
-    });
-
     Ok(())
 }
 

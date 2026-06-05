@@ -60,20 +60,6 @@ pub struct ReportResult<'info> {
     )]
     pub vault: Account<'info, TokenAccount>,
 
-    /// Organizer's ATA in the tournament's token mint. Required on final-match
-    /// when `tournament.organizer_deposit > 0` and the deposit has not been
-    /// refunded yet (Variant A — deposit is excluded from the prize-pool
-    /// basis). Pass `None` for non-final reports or when the deposit is `0`.
-    /// Mint + owner are validated by Anchor (constraints auto-skip when None).
-    #[account(
-        mut,
-        constraint = organizer_token_account.mint == tournament.token_mint
-            @ BracketChainError::InvalidTokenMint,
-        constraint = organizer_token_account.owner == tournament.organizer
-            @ BracketChainError::UnauthorizedAuthority,
-    )]
-    pub organizer_token_account: Option<Account<'info, TokenAccount>>,
-
     pub token_program: Program<'info, Token>,
 }
 
@@ -120,7 +106,6 @@ pub(crate) fn handler<'info>(
         &mut accs.match_account,
         &mut accs.next_match,
         &mut accs.vault,
-        &accs.organizer_token_account,
         &accs.protocol_config,
         &accs.token_program,
         ctx.remaining_accounts,

@@ -29,14 +29,16 @@ import { BracketChain } from "../../target/types/bracket_chain";
 //   1. Pre-start cancel refunds the deposit to the organizer ATA + entry fees.
 //   2. cancel_tournament is idempotent — the `organizer_deposit_refunded` guard
 //      blocks a second refund.
-//   3. Variant A on report_result final-match: deposit excluded from the
-//      prize-pool basis (fee/payout on `vault - deposit`) and refunded.
-//   4. Bug #1 contract: omitting organizer_token_account on a deposit final
-//      fails with InvalidVault — the program requires the SDK to pass it.
+//   3. Variant B (R13, ratified 2026-06-05) on report_result final-match: the
+//      deposit STAYS in the vault — prize basis = full vault (entries +
+//      deposit), the protocol fee applies to the deposit, and nothing returns
+//      to the organizer (`organizer_deposit_refunded` stays false).
+//   4. Sponsored prize pool — the Variant B motivating case: entry_fee = 0,
+//      the deposit alone funds the prizes.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const PROGRAM_ID = new PublicKey(
-  "3YpkUKBh8288XN2dCKSwBnEdyc5UozSJ19A1ZCLpUZsZ"
+  (idl as any).address
 );
 const TOKEN_PROGRAM = new PublicKey(
   "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
@@ -46,8 +48,6 @@ const ENTRY_FEE = 1_000_000n; // 1 USDC
 const ORGANIZER_DEPOSIT = 5_000_000n; // 5 USDC
 const FEE_BPS = 350n; // 3.5 %
 const MINT = new PublicKey("Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB"); // any consistent mint
-
-const ERR_INVALID_VAULT = 6017;
 
 const stubProvider: any = { connection: {}, publicKey: PublicKey.default };
 const program = new Program<BracketChain>(idl as any, stubProvider);
@@ -118,13 +118,15 @@ function makeTournament(o: {
   matchesInitialized: number;
   matchesReported: number;
   totalMatches: number;
+  /** Defaults to ENTRY_FEE; pass 0n for sponsored (deposit-only) pools. */
+  entryFee?: bigint;
 }) {
   return {
     organizer: o.organizer,
     name: o.name,
     tokenMint: MINT,
     vault: o.vault,
-    entryFee: new BN(ENTRY_FEE.toString()),
+    entryFee: new BN((o.entryFee ?? ENTRY_FEE).toString()),
     organizerDeposit: new BN(o.organizerDeposit.toString()),
     organizerDepositRefunded: o.organizerDepositRefunded,
     maxParticipants: o.bracketSize,
@@ -463,9 +465,9 @@ describe("organizer-deposit (LiteSVM)", function () {
   });
 
   // ───────────────────────────────────────────────────────────────────────────
-  // 3. Variant A — deposit excluded from prize basis + refunded on final
+  // 3. Variant B — deposit included in the prize basis; never refunded on final
   // ───────────────────────────────────────────────────────────────────────────
-  it("excludes organizer_deposit from prize basis and refunds it on final-match", async () => {
+  it("includes organizer_deposit in the prize basis on final-match (Variant B)", async () => {
     const svm = bootSvm();
     const organizer = new Keypair();
     svm.airdrop(organizer.publicKey.toBytes(), 10n ** 9n);
@@ -548,7 +550,6 @@ describe("organizer-deposit (LiteSVM)", function () {
           meta(PROGRAM_ID, false, false), // next_match = None
           meta(pcfg, false, false),
           meta(vault, false, true),
-          meta(organizerAta, false, true), // organizer_token_account = Some
           meta(TOKEN_PROGRAM, false, false),
           meta(champAta, false, true), // remaining: placement[0]
           meta(treasuryAta, false, true), // remaining: treasury
@@ -559,11 +560,12 @@ describe("organizer-deposit (LiteSVM)", function () {
     );
     expectOk(res);
 
-    const basis = 2n * ENTRY_FEE; // Variant A: vault - deposit
+    // Variant B: the prize basis is the FULL vault — entries + deposit.
+    const basis = 2n * ENTRY_FEE + ORGANIZER_DEPOSIT;
     const expectedFee = (basis * FEE_BPS) / 10_000n;
     const expectedChampion = basis - expectedFee;
 
-    expect(tokenAmount(svm, organizerAta)).to.equal(ORGANIZER_DEPOSIT);
+    expect(tokenAmount(svm, organizerAta)).to.equal(0n); // nothing returns
     expect(tokenAmount(svm, treasuryAta)).to.equal(expectedFee);
     expect(tokenAmount(svm, champAta)).to.equal(expectedChampion);
     expect(tokenAmount(svm, vault)).to.equal(0n);
@@ -571,20 +573,20 @@ describe("organizer-deposit (LiteSVM)", function () {
     const t = decodeTournament(svm, tournament);
     expect(Object.keys(t.status)[0]).to.equal("completed");
     expect(t.champion.toBase58()).to.equal(champ.toBase58());
-    expect(t.organizerDepositRefunded).to.equal(true);
+    expect(t.organizerDepositRefunded).to.equal(false);
   });
 
   // ───────────────────────────────────────────────────────────────────────────
-  // 4. Bug #1 contract — omitting organizer_token_account on a deposit final
-  //    must fail. This is the program-side half of the SDK regression
-  //    (reportResult previously omitted this account → InvalidVault).
+  // 4. Sponsored prize pool — the Variant B motivating case. entry_fee = 0 and
+  //    the organizer deposit alone funds the prizes; under Variant A this pool
+  //    would have paid the champion nothing.
   // ───────────────────────────────────────────────────────────────────────────
-  it("rejects a deposit final-match when organizer_token_account is None (bug #1)", async () => {
+  it("pays a deposit-only (sponsored) prize pool to the champion", async () => {
     const svm = bootSvm();
     const organizer = new Keypair();
     svm.airdrop(organizer.publicKey.toBytes(), 10n ** 9n);
     const treasury = new Keypair().publicKey;
-    const name = "od-final-noata";
+    const name = "od-sponsored";
     const [tournament, bump] = tournamentPda(organizer.publicKey, name);
     const [vault, vaultBump] = vaultPda(tournament);
     const [pcfg, pcfgBump] = protocolConfigPda();
@@ -620,6 +622,7 @@ describe("organizer-deposit (LiteSVM)", function () {
         matchesInitialized: 1,
         matchesReported: 0,
         totalMatches: 1,
+        entryFee: 0n, // free entry — the deposit IS the prize pool
       })
     );
     await writeAccount(
@@ -635,12 +638,8 @@ describe("organizer-deposit (LiteSVM)", function () {
         bump: mBump,
       })
     );
-    writeTokenAccount(
-      svm,
-      vault,
-      tournament,
-      2n * ENTRY_FEE + ORGANIZER_DEPOSIT
-    );
+    // Vault holds only the sponsor deposit — no entries.
+    writeTokenAccount(svm, vault, tournament, ORGANIZER_DEPOSIT);
     const champAta = new Keypair().publicKey;
     const treasuryAta = new Keypair().publicKey;
     writeTokenAccount(svm, champAta, champ, 0n);
@@ -657,15 +656,22 @@ describe("organizer-deposit (LiteSVM)", function () {
           meta(PROGRAM_ID, false, false), // next_match = None
           meta(pcfg, false, false),
           meta(vault, false, true),
-          meta(PROGRAM_ID, false, false), // organizer_token_account = None  ← the bug
           meta(TOKEN_PROGRAM, false, false),
-          meta(champAta, false, true),
-          meta(treasuryAta, false, true),
+          meta(champAta, false, true), // remaining: placement[0]
+          meta(treasuryAta, false, true), // remaining: treasury
         ],
         { winner: champ, placements: [champ] }
       ),
       organizer
     );
-    expectCustomErr(res, ERR_INVALID_VAULT);
+    expectOk(res);
+
+    const expectedFee = (ORGANIZER_DEPOSIT * FEE_BPS) / 10_000n;
+    expect(tokenAmount(svm, champAta)).to.equal(ORGANIZER_DEPOSIT - expectedFee);
+    expect(tokenAmount(svm, treasuryAta)).to.equal(expectedFee);
+    expect(tokenAmount(svm, vault)).to.equal(0n);
+    expect(
+      decodeTournament(svm, tournament).organizerDepositRefunded
+    ).to.equal(false);
   });
 });

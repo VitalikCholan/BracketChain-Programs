@@ -34,7 +34,7 @@ import { BracketChain } from "../../target/types/bracket_chain";
 // ─────────────────────────────────────────────────────────────────────────────
 
 const PROGRAM_ID = new PublicKey(
-  "3YpkUKBh8288XN2dCKSwBnEdyc5UozSJ19A1ZCLpUZsZ"
+  (idl as any).address
 );
 const TOKEN_PROGRAM = new PublicKey(
   "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
@@ -488,8 +488,7 @@ function finalizeKeys(
   match: PublicKey,
   nextMatch: PublicKey | null,
   pA: PublicKey,
-  pB: PublicKey,
-  organizerAta: PublicKey | null
+  pB: PublicKey
 ): AccountMeta[] {
   return [
     meta(signer, true, true),
@@ -500,7 +499,6 @@ function finalizeKeys(
     meta(pB, false, true),
     meta(b.pcfg, false, false),
     meta(b.vault, false, true),
-    meta(organizerAta ?? PROGRAM_ID, false, true),
     meta(TOKEN_PROGRAM, false, false),
   ];
 }
@@ -539,8 +537,7 @@ describe("player-reported settlement (LiteSVM)", function () {
             semi,
             final,
             participantA,
-            participantB,
-            null
+            participantB
           ),
           { placements: [] }
         ),
@@ -598,8 +595,7 @@ describe("player-reported settlement (LiteSVM)", function () {
       final,
       null,
       participantA,
-      participantB,
-      null
+      participantB
     );
     keys.push(meta(champAta, false, true), meta(b.treasuryAta, false, true)); // remaining: placement + treasury
     expectOk(
@@ -659,8 +655,7 @@ describe("player-reported settlement (LiteSVM)", function () {
             semi,
             next,
             participantA,
-            participantB,
-            null
+            participantB
           ),
           { winner: B.publicKey, placements: [] }
         ),
@@ -707,8 +702,7 @@ describe("player-reported settlement (LiteSVM)", function () {
             semi,
             next,
             participantA,
-            participantB,
-            null
+            participantB
           ),
           { placements: [] }
         ),
@@ -780,8 +774,7 @@ describe("player-reported settlement (LiteSVM)", function () {
             semi,
             next,
             participantA,
-            participantB,
-            null
+            participantB
           ),
           { placements: [] }
         ),
@@ -804,8 +797,7 @@ describe("player-reported settlement (LiteSVM)", function () {
             semi,
             next,
             participantA,
-            participantB,
-            null
+            participantB
           ),
           { placements: [] }
         ),
@@ -828,8 +820,7 @@ describe("player-reported settlement (LiteSVM)", function () {
             semi,
             next,
             participantA,
-            participantB,
-            null
+            participantB
           ),
           { placements: [] }
         ),
@@ -851,8 +842,7 @@ describe("player-reported settlement (LiteSVM)", function () {
             semi,
             next,
             participantA,
-            participantB,
-            null
+            participantB
           ),
           { placements: [] }
         ),

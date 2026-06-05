@@ -41,7 +41,6 @@ pub(crate) fn handler<'info>(
         &mut accs.match_account,
         &mut accs.next_match,
         &mut accs.vault,
-        &accs.organizer_token_account,
         &accs.protocol_config,
         &accs.token_program,
         ctx.remaining_accounts,

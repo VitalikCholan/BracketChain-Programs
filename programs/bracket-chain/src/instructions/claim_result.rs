@@ -69,15 +69,6 @@ pub struct PermissionlessFinalize<'info> {
     )]
     pub vault: Account<'info, TokenAccount>,
 
-    #[account(
-        mut,
-        constraint = organizer_token_account.mint == tournament.token_mint
-            @ BracketChainError::InvalidTokenMint,
-        constraint = organizer_token_account.owner == tournament.organizer
-            @ BracketChainError::UnauthorizedAuthority,
-    )]
-    pub organizer_token_account: Option<Account<'info, TokenAccount>>,
-
     pub token_program: Program<'info, Token>,
 }
 
@@ -114,7 +105,6 @@ pub(crate) fn handler<'info>(
         &mut accs.match_account,
         &mut accs.next_match,
         &mut accs.vault,
-        &accs.organizer_token_account,
         &accs.protocol_config,
         &accs.token_program,
         ctx.remaining_accounts,

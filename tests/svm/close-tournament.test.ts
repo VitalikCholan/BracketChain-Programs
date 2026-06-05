@@ -27,7 +27,7 @@ import { BracketChain } from "../../target/types/bracket_chain";
 // here we cover `close_root = false`, which is the bulk of the reclaimed rent.
 
 const PROGRAM_ID = new PublicKey(
-  "3YpkUKBh8288XN2dCKSwBnEdyc5UozSJ19A1ZCLpUZsZ"
+  (idl as any).address
 );
 const TOKEN_PROGRAM = new PublicKey(
   "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"

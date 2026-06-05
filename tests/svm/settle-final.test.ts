@@ -32,7 +32,7 @@ import { BracketChain } from "../../target/types/bracket_chain";
 // ─────────────────────────────────────────────────────────────────────────────
 
 const PROGRAM_ID = new PublicKey(
-  "3YpkUKBh8288XN2dCKSwBnEdyc5UozSJ19A1ZCLpUZsZ"
+  (idl as any).address
 );
 const TOKEN_PROGRAM = new PublicKey(
   "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
@@ -425,7 +425,6 @@ function finalizeKeys(signer: PublicKey, ctx: any): AccountMeta[] {
     meta(ctx.participantB, false, true),
     meta(ctx.pcfg, false, false),
     meta(ctx.vault, false, true),
-    meta(PROGRAM_ID, false, true), // organizer_token_account = None
     meta(TOKEN_PROGRAM, false, false),
   ];
 }

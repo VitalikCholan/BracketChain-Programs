@@ -185,7 +185,6 @@ describe("bracket-chain", function () {
         nextMatch: nextMatchPda,
         protocolConfig: protocolConfigPda,
         vault: vaultPda,
-        organizerTokenAccount: null,
         tokenProgram: TOKEN_PROGRAM_ID,
       })
       .signers([organizer])
@@ -225,7 +224,6 @@ describe("bracket-chain", function () {
         nextMatch: null,
         protocolConfig: protocolConfigPda,
         vault: vaultPda,
-        organizerTokenAccount: null,
         tokenProgram: TOKEN_PROGRAM_ID,
       })
       .remainingAccounts(remaining)

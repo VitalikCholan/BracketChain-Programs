@@ -26,7 +26,7 @@ import {
 // Runs the heaviest practical flow end-to-end:
 //   • 128 players (max supported by program)
 //   • Deep payout preset (7 placement payouts → most CPI fan-out)
-//   • organizer_deposit > 0 (exercises Variant A vault-pre-payout refund)
+//   • organizer_deposit > 0 (Variant B: deposit stays in the prize basis)
 //   • Full bracket reported through to final-match payout
 // Captures `meta.computeUnitsConsumed` on representative ix and asserts every
 // sample stays under the 1_400_000 single-tx ceiling. CU samples become the
@@ -229,7 +229,6 @@ describe("capacity-128p-deep", function () {
                 nextMatch: nextMatchPda,
                 protocolConfig: protocolConfigPda,
                 vault: vaultPda,
-                organizerTokenAccount: null,
                 tokenProgram: TOKEN_PROGRAM_ID,
               })
               .signers([organizer.keypair])
@@ -291,7 +290,6 @@ describe("capacity-128p-deep", function () {
             nextMatch: null,
             protocolConfig: protocolConfigPda,
             vault: vaultPda,
-            organizerTokenAccount: organizer.ata,
             tokenProgram: TOKEN_PROGRAM_ID,
           })
           .remainingAccounts(remaining)
@@ -299,35 +297,37 @@ describe("capacity-128p-deep", function () {
           .rpc(),
       "report_result_FINAL"
     );
-    await record("report_result FINAL (Deep, 128p, +deposit refund)", finalSig);
+    await record("report_result FINAL (Deep, 128p, deposit in basis)", finalSig);
 
-    // ── 6. Variant A invariants: deposit refunded, basis = vault - deposit ─
-    const grossBasis = 128n * BigInt(ENTRY_FEE.toString());
+    // ── 6. Variant B invariants: deposit in the basis; nothing returns to
+    //       the organizer; the dust-free split drains the vault to zero. ─────
+    const grossBasis =
+      128n * BigInt(ENTRY_FEE.toString()) + BigInt(ORGANIZER_DEPOSIT.toString());
     const feeExpected = (grossBasis * 350n) / 10_000n;
     const netExpected = grossBasis - feeExpected;
     const bps = [4000n, 2500n, 1500n, 1000n, 500n, 300n, 200n];
     const payouts = bps.map((b) => (netExpected * b) / 10_000n);
+    // Champion (place 1) absorbs the floor-division remainder (Medium-1 split).
+    const sumFloors = payouts.reduce((a, b) => a + b, 0n);
+    payouts[0] += netExpected - sumFloors;
 
     const treasuryAfter = await tokenBalance(conn, treasuryAta);
     const organizerAfter = await tokenBalance(conn, organizer.ata);
     expect(treasuryAfter - treasuryBefore).to.equal(feeExpected);
-    expect(organizerAfter - organizerBeforeFinal).to.equal(
-      BigInt(ORGANIZER_DEPOSIT.toString())
-    );
+    // Variant B: the deposit is prize money — the organizer gets nothing back.
+    expect(organizerAfter - organizerBeforeFinal).to.equal(0n);
 
     expect(await tokenBalance(conn, players[0].ata)).to.equal(payouts[0]);
     // 7th place is the smallest, exercise the tail of the loop.
     expect(await tokenBalance(conn, players[9].ata)).to.equal(payouts[6]);
 
-    // Vault leftover should equal rounding remainder (gross - fee - sum(payouts)).
-    const sumPayouts = payouts.reduce((a, b) => a + b, 0n);
-    const vaultLeftover = grossBasis - feeExpected - sumPayouts;
-    expect(await tokenBalance(conn, vaultPda)).to.equal(vaultLeftover);
+    // Dust-free split: the vault drains to exactly zero.
+    expect(await tokenBalance(conn, vaultPda)).to.equal(0n);
 
     const t = await program.account.tournament.fetch(tournamentPda);
     expect(t.status).to.deep.equal({ completed: {} });
     expect(t.champion.toBase58()).to.equal(champion.toBase58());
-    expect(t.organizerDepositRefunded).to.equal(true);
+    expect(t.organizerDepositRefunded).to.equal(false);
 
     // ── 7. Print CU table for CU_BUDGET.md ingestion ───────────────────────
     console.log("\n=== CU baseline (capacity-128p-deep) ===");
@@ -469,7 +469,6 @@ describe("capacity-128p-deep", function () {
                   nextMatch: nextPda,
                   protocolConfig: protocolConfigPda,
                   vault: vaultPda,
-                  organizerTokenAccount: null,
                   tokenProgram: TOKEN_PROGRAM_ID,
                 })
                 .signers([organizer.keypair])
@@ -509,7 +508,6 @@ describe("capacity-128p-deep", function () {
               nextMatch: null,
               protocolConfig: protocolConfigPda,
               vault: vaultPda,
-              organizerTokenAccount: null,
               tokenProgram: TOKEN_PROGRAM_ID,
             })
             .remainingAccounts(remaining)
