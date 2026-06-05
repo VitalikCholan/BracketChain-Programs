@@ -10,7 +10,7 @@ pub mod state;
 use instructions::*;
 use state::{PayoutPreset, SettlementMode, SupportedGame};
 
-declare_id!("3YpkUKBh8288XN2dCKSwBnEdyc5UozSJ19A1ZCLpUZsZ");
+declare_id!("EF19YVUerm5QW1CsZeqiPDAFFtaXgdt6WuYBGeiz9Q1z");
 
 #[program]
 pub mod bracket_chain {
