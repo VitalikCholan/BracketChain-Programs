@@ -2,11 +2,14 @@ use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
 
 use crate::constants::{
-    MAX_PARTICIPANTS, MAX_TOURNAMENT_NAME_LEN, MIN_PARTICIPANTS, TOURNAMENT_SEED, VAULT_SEED,
+    EVENT_VERSION_V1, MAX_PARTICIPANTS, MAX_TOURNAMENT_NAME_LEN, MIN_PARTICIPANTS, TOURNAMENT_SEED,
+    VAULT_SEED,
 };
 use crate::errors::BracketChainError;
 use crate::events::TournamentCreated;
-use crate::state::{PayoutPreset, ProtocolConfig, Tournament, TournamentStatus};
+use crate::state::{
+    PayoutPreset, ProtocolConfig, SettlementMode, SupportedGame, Tournament, TournamentStatus,
+};
 
 #[derive(Accounts)]
 #[instruction(name: String)]
@@ -80,10 +83,19 @@ pub(crate) fn handler(
     payout_preset: PayoutPreset,
     registration_deadline: i64,
     organizer_deposit: u64,
+    game: SupportedGame,
+    settlement_mode: SettlementMode,
+    dispute_window_secs: u32,
 ) -> Result<()> {
     require!(
         name.as_bytes().len() <= MAX_TOURNAMENT_NAME_LEN,
         BracketChainError::NameTooLong
+    );
+    // Phase 1 accepts Manual (no identity) + Dota2 (SAS identity). The other
+    // SupportedGame variants are reserved schema-side and rejected at create.
+    require!(
+        matches!(game, SupportedGame::Manual | SupportedGame::Dota2),
+        BracketChainError::GameNotYetSupported
     );
     require!(
         max_participants >= MIN_PARTICIPANTS,
@@ -93,6 +105,10 @@ pub(crate) fn handler(
         max_participants <= MAX_PARTICIPANTS,
         BracketChainError::MaxParticipantsExceeded
     );
+    // Custom splits: bps sum to 10000, gapless, winner funded (D-1). No-op for
+    // the fixed presets. The count <= max check below covers `placement_count`
+    // via `min_participants()` (Custom returns its funded-slot count).
+    payout_preset.validate_custom()?;
     require!(
         payout_preset.min_participants() <= max_participants,
         BracketChainError::PresetExceedsParticipants
@@ -148,8 +164,20 @@ pub(crate) fn handler(
     tournament.champion = Pubkey::default();
     tournament.bump = ctx.bumps.tournament;
     tournament.vault_bump = ctx.bumps.vault;
+    // V1.1 fields
+    tournament.game = game;
+    tournament.settlement_mode = settlement_mode;
+    tournament.dispute_window_secs = dispute_window_secs;
+    tournament.vrf_randomness_account = Pubkey::default();
+    tournament.vrf_commit_slot = 0;
+    tournament.seed_revealed = false;
+    // V1.2 (C-7): the arbitrator defaults to the organizer at create-time. It
+    // is only consulted in Oracle mode (`dispute_result`/`resolve_dispute`);
+    // a Squads-multisig reassignment ix is deferred to V1.3.
+    tournament.arbitrator = ctx.accounts.organizer.key();
 
     emit!(TournamentCreated {
+        event_version: EVENT_VERSION_V1,
         tournament: tournament.key(),
         organizer: tournament.organizer,
         token_mint: tournament.token_mint,
@@ -169,5 +197,6 @@ fn payout_preset_discriminator(preset: PayoutPreset) -> u8 {
         PayoutPreset::WinnerTakesAll => 0,
         PayoutPreset::Standard => 1,
         PayoutPreset::Deep => 2,
+        PayoutPreset::Custom(_) => 3,
     }
 }

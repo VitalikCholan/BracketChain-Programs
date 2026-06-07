@@ -1,5 +1,13 @@
 # CU Budget Baseline
 
+> **⚠️ Variant B note (2026-06-05, R13 ratified):** the organizer deposit now
+> stays in the vault on completion (no refund CPI in the final-match path), so
+> every `report_result FINAL` row below is **stale on the high side** — the
+> Variant-A measurement included a vault→organizer transfer CPI that no longer
+> exists (teammate's Variant-B measurement on the MVP architecture saw the Deep
+> 128p final drop ~80.5k → ~35.5k CU). Re-run `capacity-128p-deep` after the
+> Stage F redeploy and refresh the FINAL rows; non-final rows are unaffected.
+
 > **Phase 0 Section 3.4 deliverable.** Captures `meta.computeUnitsConsumed`
 > per instruction × preset on the current MVP program
 > (`AuXJKpuZtkegs2ZSgopgckhN7Ev8bUz4zBc238LD2F1` on devnet).

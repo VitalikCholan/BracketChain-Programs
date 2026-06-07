@@ -3,13 +3,25 @@ use anchor_spl::token::{self, Token, TokenAccount, Transfer};
 
 use crate::constants::{EVENT_VERSION_V1, TOURNAMENT_SEED, VAULT_SEED};
 use crate::errors::BracketChainError;
-use crate::events::{RefundIssued, TournamentCancelled};
+use crate::events::RefundIssued;
 use crate::state::{Participant, Tournament, TournamentStatus};
 
+/// `partial_refund_chunk` — **permissionless** refund processing for a
+/// partially-cancelled tournament (Stage E, E-3). Requires
+/// `status == PartialCancelled` (set by `partial_cancel_tournament`).
+///
+/// **Policy A — full refund to all.** Every participant — alive or already
+/// eliminated — is refunded their full `entry_fee`; the organizer recovers
+/// only their deposit (no surplus). `losses` is deliberately NOT consulted:
+/// cancelling must be a pure loss for the organizer, never a profit (an
+/// "organizer keeps eliminated fees" rule was rejected — rake-abort hazard).
+///
+/// Chunked: `remaining_accounts` is pairs of `[participant_pda, ata]`,
+/// ~10–24/call. Idempotent via `participant.refund_paid`; the organizer deposit
+/// is gated by `organizer_deposit_refunded`. Mirrors `cancel_tournament`'s
+/// refund loop, differing only in the accepted status.
 #[derive(Accounts)]
-pub struct CancelTournament<'info> {
-    /// Only required to be the organizer when flipping status to Cancelled.
-    /// Once status == Cancelled, any signer can call to process refund chunks.
+pub struct PartialRefundChunk<'info> {
     #[account(mut)]
     pub caller: Signer<'info>,
 
@@ -32,53 +44,30 @@ pub struct CancelTournament<'info> {
     )]
     pub vault: Account<'info, TokenAccount>,
 
-    /// Organizer's ATA in the tournament's token mint. Required only when an
-    /// unrefunded `organizer_deposit > 0` is being processed in this call.
-    /// Constraints (mint + owner) are validated in-handler so that callers
-    /// processing later refund chunks may pass `None`.
+    /// Organizer's ATA — required only on the call that returns the deposit
+    /// (`organizer_deposit > 0 && !organizer_deposit_refunded`). Validated
+    /// in-handler so later refund-only chunks may pass `None`.
     #[account(mut)]
     pub organizer_token_account: Option<Account<'info, TokenAccount>>,
 
     pub token_program: Program<'info, Token>,
+    // remaining_accounts: pairs of [participant_pda, ata] to refund.
 }
 
 pub(crate) fn handler<'info>(
-    ctx: Context<'_, '_, '_, 'info, CancelTournament<'info>>,
+    ctx: Context<'_, '_, '_, 'info, PartialRefundChunk<'info>>,
 ) -> Result<()> {
-    let tournament_key = ctx.accounts.tournament.key();
-    let now = Clock::get()?.unix_timestamp;
-
-    let status = ctx.accounts.tournament.status;
     require!(
-        status == TournamentStatus::Registration
-            || status == TournamentStatus::PendingBracketInit
-            || status == TournamentStatus::Cancelled,
+        ctx.accounts.tournament.status == TournamentStatus::PartialCancelled,
         BracketChainError::TournamentInProgress
     );
 
-    // First call: only organizer can flip status to Cancelled.
-    // Subsequent calls (status already Cancelled): any signer can process refunds.
-    if status != TournamentStatus::Cancelled {
-        require_keys_eq!(
-            ctx.accounts.caller.key(),
-            ctx.accounts.tournament.organizer,
-            BracketChainError::UnauthorizedAuthority
-        );
-        ctx.accounts.tournament.status = TournamentStatus::Cancelled;
-        emit!(TournamentCancelled {
-            event_version: EVENT_VERSION_V1,
-            tournament: tournament_key,
-            authority: ctx.accounts.caller.key(),
-            cancelled_at: now,
-        });
-    }
-
-    // Each participant occupies a pair of remaining_accounts: [pda, ata].
     require!(
         ctx.remaining_accounts.len() % 2 == 0,
         BracketChainError::RemainingAccountsMismatch
     );
 
+    let tournament_key = ctx.accounts.tournament.key();
     let entry_fee = ctx.accounts.tournament.entry_fee;
     let token_mint = ctx.accounts.tournament.token_mint;
     let organizer_key = ctx.accounts.tournament.organizer;
@@ -95,23 +84,16 @@ pub(crate) fn handler<'info>(
         &bump_slice,
     ]];
 
-    // Refund the organizer deposit once — gated on the flag for idempotency.
-    // Allowed on any call (organizer or any signer post-flip) as long as the
-    // organizer's ATA is supplied. Skipped silently when ATA is absent so
-    // refund-chunking calls don't have to carry the organizer's ATA every time.
+    // Return the organizer deposit once — gated for idempotency. Skipped
+    // silently when the ATA is absent so refund-only chunks need not carry it.
     if organizer_deposit > 0 && !deposit_refunded {
         if let Some(organizer_ata) = ctx.accounts.organizer_token_account.as_ref() {
-            require_keys_eq!(
-                organizer_ata.mint,
-                token_mint,
-                BracketChainError::InvalidTokenMint
-            );
+            require_keys_eq!(organizer_ata.mint, token_mint, BracketChainError::InvalidTokenMint);
             require_keys_eq!(
                 organizer_ata.owner,
                 organizer_key,
                 BracketChainError::UnauthorizedAuthority
             );
-
             token::transfer(
                 CpiContext::new_with_signer(
                     ctx.accounts.token_program.to_account_info(),
@@ -124,9 +106,7 @@ pub(crate) fn handler<'info>(
                 ),
                 organizer_deposit,
             )?;
-
             ctx.accounts.tournament.organizer_deposit_refunded = true;
-
             emit!(RefundIssued {
                 event_version: EVENT_VERSION_V1,
                 tournament: tournament_key,
@@ -136,6 +116,8 @@ pub(crate) fn handler<'info>(
         }
     }
 
+    // Refund every participant their full entry fee (Policy A — no `losses`
+    // filter). Idempotent via `refund_paid`.
     for pair in ctx.remaining_accounts.chunks(2) {
         let participant_ai = &pair[0];
         let ata_ai = &pair[1];
@@ -146,7 +128,6 @@ pub(crate) fn handler<'info>(
             BracketChainError::InvalidMatchIndex
         );
 
-        // Read participant.
         let mut participant: Participant = {
             let data = participant_ai.try_borrow_data()?;
             let mut buf: &[u8] = &data;
@@ -179,11 +160,11 @@ pub(crate) fn handler<'info>(
         )?;
 
         participant.refund_paid = true;
-
-        // Write back (disc + data).
-        let mut data = participant_ai.try_borrow_mut_data()?;
-        let mut writer: &mut [u8] = &mut data;
-        participant.try_serialize(&mut writer)?;
+        {
+            let mut data = participant_ai.try_borrow_mut_data()?;
+            let mut writer: &mut [u8] = &mut data;
+            participant.try_serialize(&mut writer)?;
+        }
 
         emit!(RefundIssued {
             event_version: EVENT_VERSION_V1,
@@ -201,11 +182,7 @@ fn validate_token_account(
     expected_owner: &Pubkey,
     expected_mint: &Pubkey,
 ) -> Result<()> {
-    require_keys_eq!(
-        *ai.owner,
-        anchor_spl::token::ID,
-        BracketChainError::InvalidTokenMint
-    );
+    require_keys_eq!(*ai.owner, anchor_spl::token::ID, BracketChainError::InvalidTokenMint);
     let data = ai.try_borrow_data()?;
     require!(data.len() >= 165, BracketChainError::InvalidTokenMint);
     let mint = Pubkey::try_from(&data[0..32])

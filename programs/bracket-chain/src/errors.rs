@@ -73,4 +73,118 @@ pub enum BracketChainError {
 
     #[msg("slot_hashes sysvar is empty; cannot derive seed")]
     SlotHashesUnavailable,
+
+    #[msg("Selected game is not yet supported for tournament creation")]
+    GameNotYetSupported,
+
+    #[msg("This game requires a SAS identity attestation to join")]
+    AttestationRequired,
+
+    #[msg("Attestation account is not owned by the SAS program")]
+    InvalidAttestationOwner,
+
+    #[msg("Attestation credential does not match the protocol's SAS credential")]
+    WrongAttestationCredential,
+
+    #[msg("Attestation schema does not match the game's SAS schema")]
+    WrongAttestationSchema,
+
+    #[msg("Attestation nonce does not bind to the joining wallet")]
+    AttestationWalletMismatch,
+
+    #[msg("Attestation has expired")]
+    AttestationExpired,
+
+    #[msg("Attestation account data is malformed")]
+    MalformedAttestation,
+
+    // ── Player-reported / Oracle settlement (Stage B) ──────────────────────
+    #[msg("This action is not allowed for the tournament's settlement mode")]
+    SettlementModeMismatch,
+
+    #[msg("Signer is not a player in this match")]
+    NotPlayerInMatch,
+
+    #[msg("Only the counterparty may confirm or dispute this proposal")]
+    NotCounterparty,
+
+    #[msg("Match has no pending proposal")]
+    NoProposal,
+
+    #[msg("Match already has a pending proposal")]
+    ProposalAlreadyExists,
+
+    #[msg("Proposed winner is not a player in this match")]
+    InvalidProposedWinner,
+
+    #[msg("Claim window has not elapsed yet")]
+    ClaimWindowNotElapsed,
+
+    #[msg("Proposal is disputed; it cannot be claimed")]
+    ProposalDisputed,
+
+    #[msg("Proposal is not disputed")]
+    ProposalNotDisputed,
+
+    #[msg("Tournament seed has not been revealed; start is gated on VRF")]
+    SeedNotRevealed,
+
+    #[msg("Switchboard randomness is not yet resolved for this slot")]
+    RandomnessNotResolved,
+
+    #[msg("Provided randomness account does not match the tournament commitment")]
+    RandomnessAccountMismatch,
+
+    #[msg("Randomness account is not owned by the Switchboard On-Demand program")]
+    InvalidRandomnessOwner,
+
+    #[msg("Randomness account data is malformed")]
+    MalformedRandomness,
+
+    #[msg("Tournament seed has already been revealed")]
+    SeedAlreadyRevealed,
+
+    #[msg("Account is not a Tournament owned by this program")]
+    InvalidTournamentAccount,
+
+    #[msg("Tournament account is already at the V1 layout; migration not needed")]
+    MigrationNotNeeded,
+
+    // ── V1.2 Oracle settlement (Stage C) ───────────────────────────────────
+    #[msg("Match already has a lobby commitment")]
+    MatchAlreadyCommitted,
+
+    #[msg("Match has no lobby commitment; commit before binding a feed")]
+    MatchNotCommitted,
+
+    #[msg("Switchboard feed account is not owned by the On-Demand program, or is on the wrong queue")]
+    WrongFeedAccount,
+
+    #[msg("Oracle feed value did not match either committed player identity")]
+    OracleWinnerNotInMatch,
+
+    #[msg("Signer is not authorized to dispute this Oracle proposal")]
+    NotAuthorized,
+
+    #[msg("Proposal source is not valid for this action")]
+    BadProposalSource,
+
+    // ── Stage D (program improvements; appended — never reorder above) ───────
+    #[msg("Custom payout split is invalid (bps must sum to 10000, be gapless, and fund the winner)")]
+    InvalidCustomPayout,
+
+    // ── H-1 hardening (appended — never reorder above) ──────────────────────
+    #[msg("A multi-placement (non-WinnerTakesAll) final may only be finalized by a trusted signer (settle_final / report_result / resolve_dispute), not a permissionless or counterparty path")]
+    UntrustedMultiPlacementFinal,
+
+    // ── H-2 hardening (appended — never reorder above) ──────────────────────
+    #[msg("Bracket descriptor is inconsistent with the VRF-derived seed permutation")]
+    BracketSeedMismatch,
+
+    #[msg("Account supplied for a bracket slot is not a Participant of this tournament")]
+    NonParticipantInBracket,
+
+    // ── L-2 hardening (appended — never reorder above) ──────────────────────
+    #[msg("Oracle config out of bounds (min_oracle_samples must be >= 1; max_stale_slots must not exceed the staleness ceiling)")]
+    InvalidOracleConfig,
 }

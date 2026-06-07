@@ -9,6 +9,13 @@
 #   scripts). The deploy + init pair lives here so the bootstrap step can never
 #   be forgotten when redeploying.
 #
+# Codama drives client generation for the SDK (single owner — F-0b).
+# Run `make codama-generate` after any IDL-affecting program change, then
+# commit the regenerated SDK tree alongside the program diff so the SDK
+# builders stay in lockstep with on-chain accounts/ix. The indexer decodes
+# events via its hand-typed BorshCoder parser + Prisma client, not Codama —
+# it only consumes the raw IDL JSON copy (see `sync-idl-events`).
+#
 # Init script lives in the SDK repo because it shares IDL + PDA helpers with
 # the published @bracketchain/sdk package — single source of truth.
 #
@@ -21,12 +28,12 @@ RPC_DEVNET ?= https://api.devnet.solana.com
 # Toolchain: All targets assume a POSIX shell with anchor, node, npm on PATH.
 # Windows users: run from inside WSL2 (Anchor + Solana CLI require Linux).
 
-.PHONY: help build test codama-generate sync-idl-events sync-idl deploy-devnet init-devnet verify-devnet redeploy-devnet
+.PHONY: help build idl test codama-generate sync-idl-events sync-idl deploy-devnet init-devnet verify-devnet redeploy-devnet
 
 help:
 	@echo "BracketChain program recipes:"
 	@echo "  make build              — anchor build + codama-generate + sync-idl-events"
-	@echo "  make codama-generate    — regenerate Codama clients into SDK + indexer src/generated/"
+	@echo "  make codama-generate    — regenerate Codama client into SDK src/generated/"
 	@echo "  make sync-idl-events    — copy raw IDL JSON to indexer (event-decoder fallback)"
 	@echo "  make sync-idl           — deprecated alias for codama-generate + sync-idl-events"
 	@echo "  make test               — anchor test (mocha against local validator)"
@@ -37,25 +44,24 @@ help:
 	@echo ""
 	@echo "Override RPC: make deploy-devnet RPC_DEVNET=https://devnet.helius-rpc.com/?api-key=KEY"
 
-# Build re-runs Codama so SDK + indexer generated/ trees never silently fall
-# behind on event/account layout changes (was: raw IDL cp; now: typed regen).
-build: anchor-build codama-generate sync-idl-events
+# Build re-runs Codama so the SDK generated/ tree never silently falls behind
+# on event/account layout changes, and refreshes the indexer's raw IDL copy.
+build: idl codama-generate sync-idl-events
 
-anchor-build:
+# Refresh `target/idl/bracket_chain.json` — used by `codama-generate`.
+idl:
 	anchor build
 
-# Phase 0 (Stage 1): regenerate typed Codama clients into both consumer repos.
-# Replaces the old hand-sync of vendored IDL JSON. SDK no longer needs the
-# vendored IDL at all. Output: <consumer>/src/generated/src/generated/ —
-# accounts/, instructions/, errors/, pdas/, programs/, types/.
-codama-generate:
+# Regenerate the Codama client into ../BracketChain-Sdk/src/generated (flat).
+# NOTE: codama.json's first renderer arg is the PACKAGE FOLDER (where
+# package.json lives) — the renderer writes flat to <folder>/src/generated.
+# Pointing it at .../src/generated would nest to src/generated/src/generated.
+codama-generate: idl
 	npx codama run --all
-	@echo "Codama clients regenerated → SDK + indexer src/generated/"
+	@echo "Codama client regenerated → SDK src/generated/"
 
-# Transitional (Phase 0 Stage 2): @codama/renderers-js v2.x does NOT emit
-# events/ yet, so the indexer keeps a raw IDL JSON copy for BorshCoder event
-# decoding only. Drop this target once renderer emits events/ or we hand-roll
-# event codecs (see bracketchain-phase-0-foundation.md Stage 2 decision).
+# The indexer keeps a raw IDL JSON copy for BorshCoder event decoding only
+# (its own Codama adoption is deferred to indexer Phase 2).
 sync-idl-events:
 	cp target/idl/bracket_chain.json   $(INDEXER_DIR)/src/idl/bracket_chain.json
 	@echo "Indexer IDL copy refreshed (event-decoder fallback)."
