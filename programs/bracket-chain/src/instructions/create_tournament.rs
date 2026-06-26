@@ -91,10 +91,13 @@ pub(crate) fn handler(
         name.as_bytes().len() <= MAX_TOURNAMENT_NAME_LEN,
         BracketChainError::NameTooLong
     );
-    // Phase 1 accepts Manual (no identity) + Dota2 (SAS identity). The other
-    // SupportedGame variants are reserved schema-side and rejected at create.
+    // Accepts Manual (no identity) + Dota2 + Cs2Faceit (both SAS identity).
+    // Valorant/LoL remain reserved schema-side and are rejected at create.
     require!(
-        matches!(game, SupportedGame::Manual | SupportedGame::Dota2),
+        matches!(
+            game,
+            SupportedGame::Manual | SupportedGame::Dota2 | SupportedGame::Cs2Faceit
+        ),
         BracketChainError::GameNotYetSupported
     );
     require!(

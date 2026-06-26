@@ -6,19 +6,17 @@ resolution = true
 skip-lint = false
 
 [programs.devnet]
-bracket_chain = "EF19YVUerm5QW1CsZeqiPDAFFtaXgdt6WuYBGeiz9Q1z"
+bracket_chain = "BeTbkzJ5MPiZP9PZ2xnhsjXCyBxVasuZJwuLQEpGiovw"
 
 [programs.localnet]
 bracket_chain = "EF19YVUerm5QW1CsZeqiPDAFFtaXgdt6WuYBGeiz9Q1z"
+
+[registry]
+url = "https://api.apr.dev"
 
 [provider]
 cluster = "devnet"
 wallet = "~/.config/solana/id.json"
 
 [scripts]
-# `anchor test` boots solana-test-validator and runs ONLY the validator-dependent
-# (e2e) suites in tests/e2e/. The hermetic LiteSVM suites (tests/svm/) run without a
-# validator via `yarn test:svm`; Rust units via `yarn test:unit`.
 test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 \"tests/e2e/**/*.test.ts\""
-
-[hooks]

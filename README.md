@@ -11,8 +11,8 @@ This repo contains only the smart contracts. The full system spans five repos �
 | Field | Value |
 |---|---|
 | Program ID — **MVP (live demo)** | `AuXJKpuZtkegs2ZSgopgckhN7Ev8bUz4zBc238LD2F1` — untouched; serves the Railway indexer + prod frontend |
-| Program ID — **Phase 1 (dev/integration)** | `3YpkUKBh8288XN2dCKSwBnEdyc5UozSJ19A1ZCLpUZsZ` — current `declare_id!`; upgraded in-place as Stages A–E land. The full A–E feature set is **code-complete and built**; the Stage F promotion ceremony (re-deploy + 9 acceptance gates) is pending. |
-| Cluster | devnet — [MVP](https://explorer.solana.com/address/AuXJKpuZtkegs2ZSgopgckhN7Ev8bUz4zBc238LD2F1?cluster=devnet) · [Phase 1 dev](https://explorer.solana.com/address/3YpkUKBh8288XN2dCKSwBnEdyc5UozSJ19A1ZCLpUZsZ?cluster=devnet) |
+| Program ID — **Phase 1 (dev/integration)** | `BeTbkzJ5MPiZP9PZ2xnhsjXCyBxVasuZJwuLQEpGiovw` — current `declare_id!`; upgraded in-place as Stages A–E land. The full A–E feature set is **code-complete and built**; the Stage F promotion ceremony (re-deploy + 9 acceptance gates) is pending. |
+| Cluster | devnet — [MVP](https://explorer.solana.com/address/AuXJKpuZtkegs2ZSgopgckhN7Ev8bUz4zBc238LD2F1?cluster=devnet) · [Phase 1 dev](https://explorer.solana.com/address/BeTbkzJ5MPiZP9PZ2xnhsjXCyBxVasuZJwuLQEpGiovw?cluster=devnet) |
 | Anchor | 0.32.1 |
 | Solana | 2.x |
 | Instructions | 24 (see [Instruction surface](#instruction-surface)) |

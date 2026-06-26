@@ -77,7 +77,7 @@ async function buildMigrateIx(programId, authority) {
 const RPC = process.env.RPC_URL ?? "https://api.devnet.solana.com";
 const WS = (process.env.RPC_WS_URL ?? RPC).replace(/^http/, "ws");
 const KEYPAIR_PATH = join(homedir(), ".config/solana/id.json");
-const PROGRAM_ID = "3YpkUKBh8288XN2dCKSwBnEdyc5UozSJ19A1ZCLpUZsZ";
+const PROGRAM_ID = "BeTbkzJ5MPiZP9PZ2xnhsjXCyBxVasuZJwuLQEpGiovw";
 
 async function main() {
   const secret = new Uint8Array(JSON.parse(readFileSync(KEYPAIR_PATH, "utf8")));

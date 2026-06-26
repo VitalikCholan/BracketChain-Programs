@@ -30,7 +30,7 @@ import {
 const RPC = process.env.RPC_URL ?? "https://api.devnet.solana.com";
 const WS = (process.env.RPC_WS_URL ?? RPC).replace(/^http/, "ws");
 const KEYPAIR_PATH = join(homedir(), ".config/solana/id.json");
-const PROGRAM_ID = "3YpkUKBh8288XN2dCKSwBnEdyc5UozSJ19A1ZCLpUZsZ";
+const PROGRAM_ID = "BeTbkzJ5MPiZP9PZ2xnhsjXCyBxVasuZJwuLQEpGiovw";
 const FRONTEND = process.env.FRONTEND_URL ?? "http://localhost:3000";
 
 const NAME = process.env.ORACLE_TOURNEY_NAME ?? `oracle-${Math.floor(Date.now() / 1000)}`;
